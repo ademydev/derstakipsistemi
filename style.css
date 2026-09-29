@@ -587,6 +587,10 @@ textarea { resize: vertical; min-height: 64px; line-height: 1.45; }
 .hint--block { display: block; margin-top: 14px; }
 .panels--stack { grid-template-columns: minmax(0, 1fr); margin-bottom: 16px; }
 
+/* --------------------------- 19) BULUT SENKRONİZASYONU ------------------ */
+#sync-status.is-error { color: var(--danger); }
+.form__error { margin-top: 8px; font-size: 13px; color: var(--danger); }
+
 
 
 

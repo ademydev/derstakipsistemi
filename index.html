@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Kişisel Ders Programım</title>
-  <meta name="description" content="Tamamen cihazında çalışan, sunucusuz kişisel ders programı. Derslerini, konularını, ödevlerini ve çalışma planını kendin oluştur." />
+  <meta name="description" content="Hesabına bağlı, tüm cihazlarında senkron çalışan kişisel ders programı. Derslerini, konularını, ödevlerini ve çalışma planını kendin oluştur." />
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#4f46e5" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f46e5'/%3E%3Cpath d='M20 18h24M20 32h24M20 46h14' stroke='white' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E" />
@@ -33,7 +33,7 @@
         </span>
         <span class="brand__text">
           <h1>Kişisel Ders Programım</h1>
-          <span class="brand__sub">Veriler yalnızca bu cihazda saklanır</span>
+          <span class="brand__sub" id="sync-status">Senkronize ediliyor…</span>
         </span>
       </div>
 
@@ -59,9 +59,10 @@
   <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
 
   <noscript>
-    <p class="noscript">Bu uygulamanın çalışması için JavaScript gerekir. Verilerin yine yalnızca kendi cihazında saklanır.</p>
+    <p class="noscript">Bu uygulamanın çalışması için JavaScript gerekir. Programın hesabına kaydedilir ve tüm cihazlarında görünür.</p>
   </noscript>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="script.js"></script>
 </body>
 </html>

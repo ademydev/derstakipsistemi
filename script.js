@@ -1,8 +1,9 @@
 /* =========================================================================
    Kişisel Ders Programı — script.js
-   Tamamen istemci tarafında çalışır: sunucu, hesap, bulut, senkronizasyon yok.
-   Veriler yalnızca bu cihazın tarayıcı deposunda tutulur (localStorage,
-   gerekirse IndexedDB'ye yedeklenir). Hiçbir veri internete gönderilmez.
+   İstemci tarafında çalışır: Supabase Authentication + program_state (JSONB,
+   RLS korumalı) ile cihazlar arası senkronizasyon yapar.
+   Veriler buluta kaydedilir; localStorage/IndexedDB önbellek ve yedek olarak
+   kullanılır. Tema tercihi yalnızca bu cihazda saklanır.
    ========================================================================= */
 (function () {
   'use strict';
@@ -190,6 +191,165 @@
     label() { return storageMode === 'localStorage' ? 'Tarayıcı yerel deposu (localStorage)' : 'IndexedDB'; }
   };
 
+  /* ------------------------- Supabase (bulut senkron) ------------------- */
+  const SUPABASE_URL = 'https://nfdtsgorctdojrkpxvpk.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_kdUa7Hj2MeCEDUcn_ZuH_A_aHLVlvpY';
+  const sb = (window.supabase && typeof window.supabase.createClient === 'function')
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+    : null;
+
+  /* Oturum ve senkronizasyon durumu (yerel kayıt katmanının üstünde çalışır). */
+  const auth = { user: null, ready: false };
+  let syncStatus = 'signed-out';   // loading | saving | saved | idle | error | offline | signed-out
+  let loadedFor = null;            // hangi kullanıcının verisi buluttan yüklendi
+  let bootstrapping = false;       // SIGNED_IN + elle çağrı çiftlemesine karşı koruma
+  let pushInFlight = false;
+  let pushQueued = false;
+  let pushFailed = false;           // son gönderim başarısız; online olunca tekrar dene
+  let lastCloudError = null;       // son bulut hatasının gerçek (sunucudan gelen) metni
+
+  let hadCache = false;            // açılışta cihazda kayıtlı veri var mıydı?
+  const SYNC_TEXT = {
+    loading: 'Buluttan yükleniyor…',
+    saving: 'Kaydediliyor…',
+    saved: 'Kaydedildi',
+    idle: 'Program bulutta güncel',
+    error: 'Kaydedilemedi',
+    offline: 'Çevrimdışı',
+    'signed-out': 'Giriş yapınca tüm cihazlarda görünür'
+  };
+
+  function setSyncStatus(kind, text) {
+    syncStatus = kind;
+    const el = document.getElementById('sync-status');
+    if (!el) return;
+    el.textContent = text || SYNC_TEXT[kind] || '';
+    el.classList.toggle('is-error', kind === 'error' || kind === 'offline');
+  }
+
+  /* program_state: user_id (PK) + data jsonb + updated_at.
+     RLS yalnızca auth.uid() = user_id olan satırlara erişim verir. */
+  /* Supabase'in döndürdüğü hatayı TÜM alanlarıyla (code / message / details /
+     hint + HTTP durumu) ve oturum bağlamıyla konsola yazar; kısa Türkçe
+     karşılığını döndürür. Böylece tahmin yerine sunucunun gerçek gerekçesi okunur. */
+  function logCloudError(op, res) {
+    const err = (res && res.error) || null;
+    console.error('[kdp] Supabase ' + op + ' hatası:', {
+      HTTP: res && res.status ? res.status : null,
+      statusText: res && res.statusText ? res.statusText : null,
+      code: err ? (err.code || null) : null,
+      message: err ? (err.message || null) : null,
+      details: err ? (err.details || null) : null,
+      hint: err ? (err.hint || null) : null,
+      tablo: 'public.program_state',
+      kullanici: auth.user ? auth.user.id : null,
+      eposta: auth.user ? (auth.user.email || null) : null,
+      cevrimdisi: navigator.onLine === false
+    });
+    return err ? cloudErrorMessage(err) : 'istek tamamlanmadı (süre aşımı)';
+  }
+
+  /* Sık görünen PostgREST/Postgres hata kodlarının kısa Türkçe karşılığı. */
+  function cloudErrorMessage(err) {
+    const code = String(err.code || '');
+    const msg = String(err.message || '');
+    if (code === '42501') return 'tablo yetkisi reddedildi (GRANT / RLS eksiği): ' + msg;
+    if (code === 'PGRST205' || code === '42P01') return 'program_state tablosu REST API üzerinde bulunamadı';
+    if (code === 'PGRST204') return 'tablo kolonu bulunamadı: ' + msg;
+    if (code === 'PGRST116') return 'beklenen tek satır bulunamadı';
+    if (code === '22P02' || code === '23514' || code === '23505' || code === '23502') return 'veri biçimi/kısıt hatası: ' + msg;
+    if (msg.indexOf('JWT expired') >= 0) return 'oturum süresi dolmuş (yeniden giriş yap)';
+    if (msg.indexOf('Failed to fetch') >= 0 || msg.indexOf('NetworkError') >= 0) return 'ağ isteği başarısız';
+    return msg || 'bilinmeyen hata';
+  }
+
+  const Cloud = {
+    /* ok:false -> ağ/hata (veri yok sayılır); ok:true + row:null -> bulut boş */
+    async load() {
+      if (!sb || !auth.user) return { ok: false, row: null };
+      const res = await withTimeout(
+        sb.from('program_state').select('data, updated_at').eq('user_id', auth.user.id).maybeSingle(),
+        8000
+      );
+      if (!res) {
+        lastCloudError = 'okuma isteği 8 sn içinde yanıt vermedi (ağ/servis)';
+        console.error('[kdp] Supabase okuma: ' + lastCloudError + ' | kullanıcı: ' + auth.user.id);
+        return { ok: false, row: null };
+      }
+      if (res.error) {
+        lastCloudError = logCloudError('okuma (select program_state)', res);
+        return { ok: false, row: null };
+      }
+      if (res.data === null) console.info('[kdp] Supabase okuma: oturuma ait satır yok (RLS süzgeci veya boş bulut).');
+      return { ok: true, row: res.data || null };
+    },
+    async push(value) {
+      if (!sb || !auth.user) return false;
+      /* Yazma anında oturum JWT'si gerçekten elde mi? (Süresi geçmişse
+         supabase-js yeniler; yenileyemezse burada somut olarak görünür.) */
+      const sess = await withTimeout(sb.auth.getSession(), 5000);
+      const session = sess && sess.data ? sess.data.session : null;
+      if (!session || !session.access_token) {
+        lastCloudError = 'oturum JWT yok — yeniden giriş yap';
+        console.error('[kdp] Supabase yazma: oturum/JWT bulunamadı. auth.user =', auth.user.id);
+        return false;
+      }
+      /* RLS'in WITH CHECK'i user_id = auth.uid() ister; JWT içindeki sub ile
+         gönderilen user_id'nin aynı olduğunu burada doğruluyoruz. */
+      const uid = session.user ? session.user.id : null;
+      if (!uid || uid !== auth.user.id) {
+        lastCloudError = 'user_id ile oturum uid uyuşmuyor';
+        console.error('[kdp] Supabase yazma: gönderilecek user_id (' + auth.user.id +
+          ') != JWT sub (' + uid + ')');
+        return false;
+      }
+      const res = await withTimeout(
+        sb.from('program_state').upsert({
+          user_id: uid,
+          data: value,
+          updated_at: nowISO()
+        }),
+        10000
+      );
+      if (!res) {
+        lastCloudError = 'yazma isteği 10 sn içinde yanıt vermedi (ağ/servis)';
+        console.error('[kdp] Supabase yazma: ' + lastCloudError + ' | kullanıcı: ' + uid);
+        return false;
+      }
+      if (res.error) {
+        lastCloudError = logCloudError('yazma (upsert program_state)', res);
+        return false;
+      }
+      return true;
+    }
+  };
+
+  /* Değişiklikleri buluta yazar; istekler sıraya (coalesce) alınır. */
+  async function pushCloud(snapshot) {
+    if (!auth.user) return false;
+    if (pushInFlight) { pushQueued = true; return true; }
+    if (navigator.onLine === false) { pushFailed = true; setSyncStatus('offline'); return false; }
+    pushInFlight = true;
+    setSyncStatus('saving');
+    const ok = await Cloud.push(snapshot);
+    pushInFlight = false;
+    pushFailed = !ok;
+    if (ok) {
+      lastCloudError = null;
+      setSyncStatus('saved');
+    } else {
+      const offline = navigator.onLine === false;
+      setSyncStatus(offline ? 'offline' : 'error');
+      /* Artık tahmini "internet" mesajı değil, Supabase'in döndürdüğü gerçek gerekçe. */
+      if (!offline) {
+        toast('Buluta kaydedilemedi: ' + (lastCloudError || 'bilinmeyen hata') +
+          ' — ayrıntı tarayıcı konsolunda.');
+      }
+    }
+    if (pushQueued) { pushQueued = false; pushCloud(state); }
+    return ok;
+  }
+
   /* ------------------------------ Veri modeli ---------------------------- */
   /*
     state = {
@@ -269,6 +429,8 @@
   let state = emptyState();
 
   const ui = {
+    authMode: 'login',  // login | signup — giriş/kayıt formu
+    authError: null,    // giriş formunda gösterilecek hata
     view: 'week',     // week | today | school | study | settings
     drawer: null,     // açık dersin kimliği
     forms: {},        // açık satır içi formlar
@@ -304,6 +466,7 @@
     state.updatedAt = nowISO();
     touchedByUser = true;
     pendingSave = true;
+    if (auth.user) setSyncStatus(navigator.onLine === false ? 'offline' : 'saving');
     if (saveTimer) window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(flushSave, 180);
   }
@@ -311,8 +474,12 @@
     if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
     if (!pendingSave) return;
     pendingSave = false;
+    // 1) yerel önbellek/yedek her koşulda yazılır
     const ok = await Store.write(state);
     if (!ok) toast('Kaydedilemedi: tarayıcı deposu dolu veya engellenmiş olabilir.');
+    // 2) oturum açıkken değişiklikler buluta gönderilir
+    if (!auth.user) { setSyncStatus('signed-out'); return; }
+    await pushCloud(state);
   }
 
   /* ------------------------------ Sorgular ------------------------------- */
@@ -627,6 +794,16 @@
   }
 
   function renderView() {
+    /* Oturum kapalıyken programın tamamı giriş ekranıyla (kapı) korunur;
+       Ayarlar görünümü (dışa aktarma vb.) her durumda erişilebilir kalır. */
+    if (ui.view !== 'settings') {
+      if (!auth.ready) {
+        return '<section class="page">' +
+          '<div class="empty"><h3>Yükleniyor…</h3><p>Programın hesaptan yükleniyor.</p></div>' +
+        '</section>';
+      }
+      if (!auth.user) return viewAuth();
+    }
     if (ui.view === 'today') return viewToday();
     if (ui.view === 'school') return viewSchool();
     if (ui.view === 'study') return viewStudy();
@@ -898,8 +1075,25 @@
     try { updated = new Date(state.updatedAt).toLocaleString('tr-TR'); } catch (e) { /* yoksay */ }
 
     return '<section class="page">' +
-      pageHeader('Ayarlar', 'Tema, yedekleme ve bu cihazdaki veriler') +
+      pageHeader('Ayarlar', 'Hesap, tema, yedekleme ve program verileri') +
       '<div class="panels">' +
+
+        '<section class="panel">' +
+          '<h3>Hesap</h3>' +
+          (!auth.ready
+            ? '<p class="panel__sub">Oturum kontrol ediliyor…</p>'
+            : (auth.user
+              ? '<p class="panel__sub">Programın bu hesaba kayıtlıdır; hangi cihazdan giriş yaparsan yap aynı görünür.</p>' +
+                '<dl class="kv">' +
+                  '<dt>E-posta</dt><dd>' + esc(auth.user.email || '') + '</dd>' +
+                  '<dt>Oturum</dt><dd>Açık</dd>' +
+                '</dl>' +
+                '<div class="rows mt">' +
+                  '<button type="button" class="btn" data-action="sign-out">Çıkış Yap</button>' +
+                '</div>'
+              : '<p class="panel__sub">Programını tüm cihazlarında kullanmak için hesabına giriş yap.</p>' +
+                authForm())) +
+        '</section>' +
 
         '<section class="panel">' +
           '<h3>Tema</h3>' +
@@ -912,8 +1106,8 @@
         '</section>' +
 
         '<section class="panel">' +
-          '<h3>Cihazdaki veriler</h3>' +
-          '<p class="panel__sub">Bu veriler yalnızca bu tarayıcıda tutulur; başka cihazlarla paylaşılmaz.</p>' +
+          '<h3>Program verileri</h3>' +
+          '<p class="panel__sub">Programın hesabının Supabase kaydında saklanır; ayrıca bu tarayıcıda bir önbellek tutulur.</p>' +
           '<dl class="kv">' +
             '<dt>Ders</dt><dd>' + c.courses + '</dd>' +
             '<dt>Konu</dt><dd>' + c.topics + '</dd>' +
@@ -923,11 +1117,11 @@
             '<dt>Not</dt><dd>' + c.notes + '</dd>' +
             '<dt>Kaynak</dt><dd>' + c.sources + '</dd>' +
             '<dt>Son değişiklik</dt><dd>' + esc(updated) + '</dd>' +
-            '<dt>Saklama yeri</dt><dd>' + esc(Store.label()) + '</dd>' +
+            '<dt>Saklama yeri</dt><dd>Supabase (program_state) · önbellek: ' + esc(Store.label()) + '</dd>' +
           '</dl>' +
           '<div class="notice">' + ICONS.info +
-            '<span>Sunucu, hesap, bulut veya otomatik senkronizasyon yok. Uygulama internete veri göndermez; ' +
-            'başka bir cihaza taşımak istersen yedek dosyasını kendin aktarmalısın.</span></div>' +
+            '<span>Değişiklikler kaydedildikçe hesabına gönderilir; açılışta ve sekmeyi her ön plana çıkarışında ' +
+            'buluttan güncel veriler yüklenir. Yedek dosyasıyla da taşıyabilirsin.</span></div>' +
         '</section>' +
 
         '<section class="panel">' +
@@ -943,7 +1137,7 @@
 
         '<section class="panel panel--danger">' +
           '<h3>Verileri sil</h3>' +
-          '<p class="panel__sub">Bu cihazdaki tüm ders, konu, ödev ve notlar silinir. Geri alınamaz.</p>' +
+          '<p class="panel__sub">Hesabındaki tüm ders, konu, ödev ve notlar silinir (bulut dahil). Geri alınamaz.</p>' +
           '<div class="rows">' +
             '<button type="button" class="btn btn--danger" data-action="reset-all">' + ICONS.trash + 'Tüm verileri sil</button>' +
           '</div>' +
@@ -1405,7 +1599,7 @@
           '<p class="modal__sub">“' + esc(ui.modal.fileName) + '” dosyasında <strong>' + total +
             ' ders</strong> ve <strong>' + incomingItems + ' ayrıntı kaydı</strong> bulundu.<br>' +
             'Bu cihazda şu an ' + c.courses + ' ders var.</p>' +
-          '<p class="hint">Yüklenen dosya internete gönderilmez; yalnızca bu cihazda işlenir.</p>' +
+          '<p class="hint">Dosya önce yalnızca tarayıcıda okunur; onayından sonra hesabına aktarılır ve buluta kaydedilir.</p>' +
         '</div>' +
         '<div class="modal__foot">' +
           '<button type="button" class="btn btn--ghost" data-action="close-modal">Vazgeç</button>' +
@@ -1743,6 +1937,16 @@
         render();
         break;
 
+      case 'sign-out':
+        signOut();
+        break;
+
+      case 'switch-auth-mode':
+        ui.authMode = ui.authMode === 'signup' ? 'login' : 'signup';
+        ui.authError = null;
+        render();
+        break;
+
       case 'close-modal':
         ui.modal = null;
         render();
@@ -1775,7 +1979,7 @@
       case 'reset-all':
         requestConfirm({
           title: 'Tüm verileri silmek istediğine emin misin?',
-          text: 'Bu cihazdaki bütün dersler, konular, ödevler, hedefler ve notlar silinir. Bu işlem geri alınamaz. ' +
+          text: 'Hesabındaki bütün dersler, konular, ödevler, hedefler ve notlar silinir (bulut dahil). Bu işlem geri alınamaz. ' +
             'Yedek almak istersen önce “Verilerimi dışa aktar” seçeneğini kullanabilirsin.',
           label: 'Evet, tüm verileri sil',
           onConfirm: resetAll
@@ -1807,6 +2011,9 @@
     } else if (form.dataset.action === 'submit-form') {
       event.preventDefault();
       handleFormSubmit(form);
+    } else if (form.dataset.action === 'submit-auth') {
+      event.preventDefault();
+      handleAuthSubmit(form);
     }
   }
 
@@ -1895,6 +2102,233 @@
   }
 
   /* -------------------------------- Başlat ------------------------------- */
+  /* ----------------------------- Hesap (giriş) --------------------------- */
+  function authForm() {
+    const signup = ui.authMode === 'signup';
+    return '<form class="form" data-action="submit-auth">' +
+      '<div class="field">' +
+        '<label class="field__label">E-posta</label>' +
+        '<input type="email" name="email" required autocomplete="email" placeholder="ornek@eposta.com">' +
+      '</div>' +
+      '<div class="field">' +
+        '<label class="field__label">Şifre</label>' +
+        '<input type="password" name="password" required minlength="6" autocomplete="' +
+          (signup ? 'new-password' : 'current-password') + '" placeholder="En az 6 karakter">' +
+      '</div>' +
+      '<div class="form__actions mt-sm">' +
+        '<button type="submit" class="btn btn--primary">' + (signup ? 'Kayıt Ol' : 'Giriş Yap') + '</button>' +
+        '<button type="button" class="btn btn--ghost" data-action="switch-auth-mode">' +
+          (signup ? 'Zaten hesabım var' : 'Hesabım yok, kayıt ol') + '</button>' +
+      '</div>' +
+      (ui.authError ? '<p class="form__error">' + esc(ui.authError) + '</p>' : '') +
+    '</form>';
+  }
+
+  /* Oturum kapalıyken tüm görünümlerin önünde duran giriş/kayıt kapısı. */
+  function viewAuth() {
+    const signup = ui.authMode === 'signup';
+    return '<section class="page">' +
+      pageHeader(
+        signup ? 'Kayıt Ol' : 'Giriş Yap',
+        signup
+          ? 'Kayıttan sonra e-postana doğrulama bağlantısı gelir; doğruladıktan sonra giriş yapabilirsin.'
+          : 'Programını tüm cihazlarında kullanmak için hesabına giriş yap.'
+      ) +
+      '<div class="panels">' +
+        '<section class="panel">' +
+          '<h3>' + (signup ? 'Yeni hesap oluştur' : 'Hesabına giriş yap') + '</h3>' +
+          '<p class="panel__sub">Bilgisayarında eklediğin ders telefonda da görünür; ' +
+            'program hesabına kaydedilir ve RLS ile yalnızca sana aittir.</p>' +
+          authForm() +
+        '</section>' +
+      '</div>' +
+    '</section>';
+  }
+
+  /* Hata metnini formu yeniden çizmeden DOM üzerinde günceller
+     (tam render girilen e-posta/şifreyi silmesin diye). */
+  function setAuthError(message) {
+    ui.authError = message || null;
+    const form = document.querySelector('[data-action="submit-auth"]');
+    if (!form) { render(); return; }
+    let p = form.querySelector('.form__error');
+    if (!message) { if (p) p.parentNode.removeChild(p); return; }
+    if (!p) { p = document.createElement('p'); p.className = 'form__error'; form.appendChild(p); }
+    p.textContent = message;
+  }
+
+  function authErrorMessage(err) {
+    const msg = String((err && err.message) || '').toLowerCase();
+    if (msg.indexOf('invalid login credentials') >= 0) return 'E-posta veya şifre hatalı.';
+    if (msg.indexOf('email not confirmed') >= 0) return 'E-posta henüz doğrulanmamış; gelen kutundaki bağlantıdan doğrulayıp tekrar dene.';
+    if (msg.indexOf('already registered') >= 0 || msg.indexOf('already been registered') >= 0) return 'Bu e-posta ile kayıtlı bir hesap zaten var; giriş yapmayı dene.';
+    if (msg.indexOf('at least 6') >= 0) return 'Şifre en az 6 karakter olmalı.';
+    if (msg.indexOf('validate email') >= 0) return 'Geçerli bir e-posta adresi gir.';
+    if (msg.indexOf('rate limit') >= 0 || msg.indexOf('security purposes') >= 0) return 'Çok fazla deneme yapıldı; biraz sonra tekrar dene.';
+    if (msg.indexOf('failed to fetch') >= 0 || msg.indexOf('network') >= 0) return 'Bağlantı hatası; internet bağlantını kontrol et.';
+    return 'İşlem tamamlanamadı: ' + ((err && err.message) || 'bilinmeyen hata');
+  }
+
+  async function handleAuthSubmit(form) {
+    if (!sb) { setAuthError('Bağlantı kitaplığı yüklenemedi; sayfayı yenileyip tekrar dene.'); return; }
+    const data = new FormData(form);
+    const email = String(data.get('email') || '').trim();
+    const password = String(data.get('password') || '');
+    if (!email || !password) return;
+    const signup = ui.authMode === 'signup';
+    setAuthError(null);
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Bekleyin…'; }
+    try {
+      if (signup) {
+        const { data: res, error } = await sb.auth.signUp({ email: email, password: password });
+        if (error) throw error;
+        if (res && res.session) {
+          handleSignedIn(res.user); // e-posta doğrulaması kapalıysa anında oturum
+        } else {
+          // Supabase panosunda doğrulama açık: bağlantıya tıklamak gerekir
+          ui.authMode = 'login';
+          ui.authError = 'Kayıt oluşturuldu. E-postana gönderilen doğrulama bağlantısına ' +
+            'tıkladıktan sonra giriş yapabilirsin.';
+          render();
+          toast('E-posta doğrulaması gerekiyor; gelen kutunu kontrol et.');
+        }
+      } else {
+        const { data: res, error } = await sb.auth.signInWithPassword({ email: email, password: password });
+        if (error) throw error;
+        handleSignedIn(res.user);
+      }
+    } catch (err) {
+      console.warn('[kdp] auth:', err && err.message);
+      setAuthError(authErrorMessage(err));
+      if (btn) { btn.disabled = false; btn.textContent = signup ? 'Kayıt Ol' : 'Giriş Yap'; }
+    }
+  }
+
+  function handleSignedIn(user) {
+    if (!user) return;
+    auth.user = user;
+    auth.ready = true;
+    render();        // giriş kapısı kalkar
+    bootstrapLoad(); // buluttan yükleme (idempotent)
+  }
+
+  /* ------------------------ Bulut senkronizasyonu ------------------------ */
+  async function signOut() {
+    if (pendingSave || saveTimer) { try { await flushSave(); } catch (e) { /* yoksay */ } }
+    const user = auth.user;
+    auth.user = null; // SIGNED_OUT olayının ikinci kez çalışmasını önle
+    if (sb && user) { try { await sb.auth.signOut(); } catch (e) { /* yoksay */ } }
+    onSignedOut();
+  }
+
+  /* Çıkışta yerel önbelleği temizle: açık tarayıcıda başka biri eski
+     programı görmesin/göçte taşınmasın. Veriler bulutta durur. */
+  function onSignedOut() {
+    const theme = state.settings.theme;
+    auth.user = null;
+    auth.ready = true;
+    loadedFor = null;
+    bootstrapping = false;
+    state = emptyState();
+    state.settings.theme = theme;
+    ui.view = 'week';
+    ui.drawer = null;
+    ui.modal = null;
+    closeForms();
+    ui.authMode = 'login';
+    ui.authError = null;
+    pendingSave = false;
+    pushFailed = false;
+    pushQueued = false;
+    if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
+    Store.clear().then(function () { Store.write(state); });
+    applyTheme();
+    setSyncStatus('signed-out');
+    render();
+    toast('Oturum kapatıldı. Programın bulutta kayıtlı.');
+  }
+
+  /* Bulut verisini yükle; boşsa yerel veriyi hesaba göç ettir (ilk giriş). */
+  async function bootstrapLoad() {
+    if (!sb || !auth.user || bootstrapping) return;
+    if (loadedFor === auth.user.id) { render(); return; }
+    bootstrapping = true;
+    setSyncStatus('loading');
+    try {
+      const res = await Cloud.load();
+      if (!res.ok) {
+        // Ağ/hata: yerel veri korunur; sekme ön plana çıkınca/online olunca tekrar denenir
+        setSyncStatus(navigator.onLine === false ? 'offline' : 'error');
+        render();
+        return;
+      }
+      loadedFor = auth.user.id;
+      const row = res.row;
+      const remoteState = (row && isPlainObject(row.data) && isPlainObject(row.data.days)) ? row.data : null;
+      const remoteHas = !!remoteState && countStateCourses(remoteState) > 0;
+      const localHas = hasAnyContent();
+
+      if (remoteHas) {
+        const remoteTime = Date.parse((row && row.updated_at) || remoteState.updatedAt || '') || 0;
+        const localTime = Date.parse(state.updatedAt || '') || 0;
+        if (localHas && hadCache && localTime > remoteTime) {
+          // Bu cihazdaki son değişiklikler buluttan yeni (ör. çevrimdışı düzenleme)
+          const pushed = await pushCloud(state);
+          if (pushed) setSyncStatus('idle');
+        } else {
+          state = normalize(remoteState);
+          applyTheme();
+          await Store.write(state);
+          if (localHas && !hadCache) toast('Buluttan güncel program yüklendi.');
+          setSyncStatus('idle');
+        }
+        render();
+        return;
+      }
+      if (localHas) {
+        // Bulut boş: cihazdaki yerel veri ilk girişte hesaba taşınır (göç)
+        await pushCloud(state);
+        render();
+        return;
+      }
+      setSyncStatus('idle');
+      render();
+    } finally {
+      bootstrapping = false;
+    }
+  }
+
+  /* Sekme ön plana çıkınca/online olunca buluttan tazele (Realtime yok). */
+  async function refreshFromCloud() {
+    if (!sb || !auth.user || !auth.ready || bootstrapping) return;
+    if (pendingSave || saveTimer || pushInFlight || pushQueued) return;
+    const res = await Cloud.load();
+    if (!res.ok || !res.row) return;
+    const remoteState = res.row.data;
+    if (!isPlainObject(remoteState) || !isPlainObject(remoteState.days)) return;
+    const remoteTime = Date.parse(res.row.updated_at || remoteState.updatedAt || '') || 0;
+    const localTime = Date.parse(state.updatedAt || '') || 0;
+    if (remoteTime > localTime) {
+      state = normalize(remoteState);
+      applyTheme();
+      await Store.write(state);
+      render();
+      setSyncStatus('idle');
+    }
+  }
+
+  /* state'in ham (normalize öncesi) hâlindeki ders sayısı — göç kararları için. */
+  function countStateCourses(raw) {
+    let n = 0;
+    if (!raw || !isPlainObject(raw.days)) return 0;
+    DAYS.forEach(function (d) {
+      const day = raw.days[d.id];
+      if (day && Array.isArray(day.courses)) n += day.courses.length;
+    });
+    return n;
+  }
+
   function init() {
     document.addEventListener('click', onClick);
     document.addEventListener('submit', onSubmit);
@@ -1921,19 +2355,65 @@
     window.addEventListener('beforeunload', function () { flushSave(); });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'hidden') flushSave();
+      else if (pushFailed) pushCloud(state); // ertelenmiş gönderimi tamamla
+      else refreshFromCloud(); // sekme ön plana: buluttan tazele
     });
+    window.addEventListener('online', function () {
+      if (auth.user) {
+        if (pendingSave) flushSave();
+        if (pushFailed) pushCloud(state);
+        else refreshFromCloud();
+      } else {
+        setSyncStatus('signed-out');
+      }
+    });
+    window.addEventListener('offline', function () { setSyncStatus('offline'); });
 
     applyTheme();
     /* Önce boş iskelet (yedi gün) hemen çizilir; ardından cihazdaki veriler yüklenir.
        Böylece depolama erişimi yavaş olsa bile arayüz beklemede kalmaz. */
     render();
 
-    /* Veri yalnızca bu cihazdan okunur. */
+    /* 1) Yerel önbellek/yedek okunur (çevrimdışı erişim + göç kaynağı). */
     Store.read().then(function (raw) {
-      if (touchedByUser) return; // kullanıcı bu sırada veri ekledi; üzerine yazma
-      state = normalize(raw);
-      applyTheme();
+      if (!touchedByUser) { // kullanıcı bu sırada veri eklediyse üzerine yazma
+        hadCache = !!raw;
+        state = normalize(raw);
+        applyTheme();
+        render();
+      }
+      /* 2) Oturum kontrolü; girişliyse buluttan yükleme. */
+      return startAuth();
+    });
+  }
+
+  /* Oturumu başlat: oturum varsa buluttan yükle, yoksa giriş kapısını göster. */
+  async function startAuth() {
+    if (!sb) { // Supabase SDK sayfaya yüklenmedi
+      auth.ready = true;
+      setSyncStatus('signed-out');
       render();
+      return;
+    }
+    try {
+      const { data } = await sb.auth.getSession();
+      auth.user = data && data.session ? data.session.user : null;
+    } catch (e) {
+      auth.user = null;
+    }
+    auth.ready = true;
+    if (auth.user) {
+      await bootstrapLoad();
+    } else {
+      setSyncStatus('signed-out');
+      render();
+    }
+    sb.auth.onAuthStateChange(function (event, session) {
+      if (event === 'SIGNED_OUT') {
+        if (auth.user) onSignedOut(); // kapalıysa ikinci kez çalıştırma
+        return;
+      }
+      if (event === 'SIGNED_IN' && session && session.user) handleSignedIn(session.user);
     });
   }
 
