@@ -202,6 +202,7 @@
   const auth = { user: null, ready: false };
   let syncStatus = 'signed-out';   // loading | saving | saved | idle | error | offline | signed-out
   let loadedFor = null;            // hangi kullanıcının verisi buluttan yüklendi
+  let loadingFor = null;           // hangi kullanıcının verisi şu anda buluttan geliyor
   let bootstrapping = false;       // SIGNED_IN + elle çağrı çiftlemesine karşı koruma
   let pushInFlight = false;
   let pushQueued = false;
@@ -224,7 +225,20 @@
     const el = document.getElementById('sync-status');
     if (!el) return;
     el.textContent = text || SYNC_TEXT[kind] || '';
-    el.classList.toggle('is-error', kind === 'error' || kind === 'offline');
+    const retryable = kind === 'error' || kind === 'offline';
+    el.classList.toggle('is-error', retryable);
+    /* Hata/çevrimdışı durumda yazı tıklanabilir hâle gelir: aynı isteği yineler. */
+    if (retryable) {
+      el.setAttribute('data-action', 'retry-cloud');
+      el.setAttribute('role', 'button');
+      el.setAttribute('tabindex', '0');
+      el.title = 'Yeniden dene';
+    } else {
+      el.removeAttribute('data-action');
+      el.removeAttribute('role');
+      el.removeAttribute('tabindex');
+      el.removeAttribute('title');
+    }
   }
 
   /* program_state: user_id (PK) + data jsonb + updated_at.
@@ -803,6 +817,14 @@
         '</section>';
       }
       if (!auth.user) return viewAuth();
+      /* Oturum sahibinin verisi buluttan gelene kadar program çizilmez: aynı
+         cihazda kalmış eski ya da başka hesaba ait önbellek ekrana çıkamaz. */
+      if (loadingFor === auth.user.id) {
+        return '<section class="page">' +
+          '<div class="empty"><h3>Programın yükleniyor…</h3>' +
+          '<p>Hesabındaki program getirilir getirilmez derslerin görünecek.</p></div>' +
+        '</section>';
+      }
     }
     if (ui.view === 'today') return viewToday();
     if (ui.view === 'school') return viewSchool();
@@ -1137,7 +1159,9 @@
 
         '<section class="panel panel--danger">' +
           '<h3>Verileri sil</h3>' +
-          '<p class="panel__sub">Hesabındaki tüm ders, konu, ödev ve notlar silinir (bulut dahil). Geri alınamaz.</p>' +
+          '<p class="panel__sub">' + (auth.user
+            ? 'Hesabındaki tüm ders, konu, ödev ve notlar silinir (bulut dahil). Geri alınamaz.'
+            : 'Giriş yapmış değilsin: yalnızca bu cihazdaki ders, konu, ödev ve notlar silinir. Geri alınamaz.') + '</p>' +
           '<div class="rows">' +
             '<button type="button" class="btn btn--danger" data-action="reset-all">' + ICONS.trash + 'Tüm verileri sil</button>' +
           '</div>' +
@@ -1202,7 +1226,8 @@
     save();
     flushSave();
     render();
-    toast('Yedek içe aktarıldı: ' + counts().courses + ' ders yüklendi.');
+    toast('Yedek içe aktarıldı: ' + counts().courses + ' ders yüklendi.' +
+      (auth.user ? '' : ' Giriş yapınca bu program hesabına da gönderilir.'));
   }
 
   function applyImportMerge(incoming) {
@@ -1219,7 +1244,8 @@
     save();
     flushSave();
     render();
-    toast('Yedek verilerinle birleştirildi: ' + added + ' ders eklendi.');
+    toast('Yedek verilerinle birleştirildi: ' + added + ' ders eklendi.' +
+      (auth.user ? '' : ' Giriş yapınca bu program hesabına da gönderilir.'));
   }
 
   function resetAll() {
@@ -1232,7 +1258,9 @@
       save();
       flushSave();
       render();
-      toast('Bu cihazdaki tüm veriler silindi.');
+      toast(auth.user
+        ? 'Tüm veriler silindi: bu cihaz ve hesabındaki program temizlendi.'
+        : 'Bu cihazdaki veriler silindi. Giriş yapmış değilsin; hesabındaki program silinmedi.');
     });
   }
 
@@ -1324,7 +1352,7 @@
           '<input type="text" name="text" value="' + esc(item ? item.text : '') +
           '" placeholder="Örn. TYT matematik"></div>' +
       '</div>';
-    } else if (kind === 'note') {
+    } else if (kind === 'notes') {
       field = '<div class="field"><label class="field__label">Not</label>' +
         '<textarea name="text" required placeholder="' + esc(config.placeholder) + '">' +
         esc(item ? item.text : '') + '</textarea></div>';
@@ -1599,7 +1627,9 @@
           '<p class="modal__sub">“' + esc(ui.modal.fileName) + '” dosyasında <strong>' + total +
             ' ders</strong> ve <strong>' + incomingItems + ' ayrıntı kaydı</strong> bulundu.<br>' +
             'Bu cihazda şu an ' + c.courses + ' ders var.</p>' +
-          '<p class="hint">Dosya önce yalnızca tarayıcıda okunur; onayından sonra hesabına aktarılır ve buluta kaydedilir.</p>' +
+          '<p class="hint">Dosya önce yalnızca tarayıcıda okunur; onayından sonra ' +
+            (auth.user ? 'hesabına aktarılır ve buluta kaydedilir.'
+                       : 'bu cihazda saklanır; giriş yapınca hesabına da gönderilir.') + '</p>' +
         '</div>' +
         '<div class="modal__foot">' +
           '<button type="button" class="btn btn--ghost" data-action="close-modal">Vazgeç</button>' +
@@ -1941,6 +1971,14 @@
         signOut();
         break;
 
+      /* "Kaydedilemedi" / "Çevrimdışı" yazısına tıklayınca aynı işlemi yineler. */
+      case 'retry-cloud':
+        if (!auth.user) { setSyncStatus('signed-out'); break; }
+        if (pendingSave || saveTimer) flushSave();
+        else if (pushFailed) pushCloud(state);
+        else bootstrapLoad();
+        break;
+
       case 'switch-auth-mode':
         ui.authMode = ui.authMode === 'signup' ? 'login' : 'signup';
         ui.authError = null;
@@ -1979,8 +2017,12 @@
       case 'reset-all':
         requestConfirm({
           title: 'Tüm verileri silmek istediğine emin misin?',
-          text: 'Hesabındaki bütün dersler, konular, ödevler, hedefler ve notlar silinir (bulut dahil). Bu işlem geri alınamaz. ' +
-            'Yedek almak istersen önce “Verilerimi dışa aktar” seçeneğini kullanabilirsin.',
+          text: auth.user
+            ? 'Hesabındaki bütün dersler, konular, ödevler, hedefler ve notlar silinir (bulut dahil). Bu işlem geri alınamaz. ' +
+              'Yedek almak istersen önce “Verilerimi dışa aktar” seçeneğini kullanabilirsin.'
+            : 'Giriş yapmış değilsin: yalnızca bu cihazdaki dersler, konular, ödevler ve notlar silinir. ' +
+              'Hesabındaki program silinmez ve giriş yapınca yeniden görünür. ' +
+              'Yedek almak istersen önce “Verilerimi dışa aktar” seçeneğini kullanabilirsin.',
           label: 'Evet, tüm verileri sil',
           onConfirm: resetAll
         });
@@ -2022,6 +2064,12 @@
       if (pendingConfirm) { closeConfirm(false); return; }
       if (ui.modal) { ui.modal = null; render(); return; }
       if (ui.drawer) { ui.drawer = null; closeForms(); render(); return; }
+      return;
+    }
+    const status = event.target && event.target.closest ? event.target.closest('#sync-status[data-action]') : null;
+    if (status && event.target === status && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      handleAppAction('retry-cloud', status); // klavye ile yeniden dene
       return;
     }
     const card = event.target && event.target.closest ? event.target.closest('.course') : null;
@@ -2207,10 +2255,13 @@
 
   function handleSignedIn(user) {
     if (!user) return;
+    /* Aynı sekmede hesap değişimi: önceki hesabın verisi yeni hesaba
+       taşınmasın diye yerel program temizlenir (veri bulutta durur). */
+    if (loadedFor && loadedFor !== user.id) clearLocalProgram();
     auth.user = user;
     auth.ready = true;
+    bootstrapLoad(); // yükleme ekranını kendisi çizer (idempotent)
     render();        // giriş kapısı kalkar
-    bootstrapLoad(); // buluttan yükleme (idempotent)
   }
 
   /* ------------------------ Bulut senkronizasyonu ------------------------ */
@@ -2225,28 +2276,36 @@
   /* Çıkışta yerel önbelleği temizle: açık tarayıcıda başka biri eski
      programı görmesin/göçte taşınmasın. Veriler bulutta durur. */
   function onSignedOut() {
-    const theme = state.settings.theme;
     auth.user = null;
     auth.ready = true;
-    loadedFor = null;
+    loadingFor = null;
     bootstrapping = false;
-    state = emptyState();
-    state.settings.theme = theme;
+    clearLocalProgram();
     ui.view = 'week';
-    ui.drawer = null;
-    ui.modal = null;
-    closeForms();
     ui.authMode = 'login';
     ui.authError = null;
-    pendingSave = false;
-    pushFailed = false;
-    pushQueued = false;
-    if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
-    Store.clear().then(function () { Store.write(state); });
     applyTheme();
     setSyncStatus('signed-out');
     render();
     toast('Oturum kapatıldı. Programın bulutta kayıtlı.');
+  }
+
+  /* Yerel programı ve önbelleğini temizler; tema tercihi kalır. Çıkışta ve
+     hesap değişiminde kullanılır: eski verinin yeni hesaba göç etmesini engeller. */
+  function clearLocalProgram() {
+    const theme = state.settings.theme;
+    state = emptyState();
+    state.settings.theme = theme;
+    ui.drawer = null;
+    ui.modal = null;
+    closeForms();
+    pendingSave = false;
+    pushFailed = false;
+    pushQueued = false;
+    hadCache = false;
+    loadedFor = null;
+    if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
+    Store.clear().then(function () { Store.write(state); });
   }
 
   /* Bulut verisini yükle; boşsa yerel veriyi hesaba göç ettir (ilk giriş). */
@@ -2254,13 +2313,13 @@
     if (!sb || !auth.user || bootstrapping) return;
     if (loadedFor === auth.user.id) { render(); return; }
     bootstrapping = true;
+    loadingFor = auth.user.id;
     setSyncStatus('loading');
     try {
       const res = await Cloud.load();
       if (!res.ok) {
         // Ağ/hata: yerel veri korunur; sekme ön plana çıkınca/online olunca tekrar denenir
         setSyncStatus(navigator.onLine === false ? 'offline' : 'error');
-        render();
         return;
       }
       loadedFor = auth.user.id;
@@ -2283,19 +2342,20 @@
           if (localHas && !hadCache) toast('Buluttan güncel program yüklendi.');
           setSyncStatus('idle');
         }
-        render();
         return;
       }
       if (localHas) {
         // Bulut boş: cihazdaki yerel veri ilk girişte hesaba taşınır (göç)
         await pushCloud(state);
-        render();
         return;
       }
       setSyncStatus('idle');
-      render();
     } finally {
+      /* Yükleme bitti: bayraklar temizlenir ve tek çizim burada yapılır,
+         aksi hâlde sonuç ekranı "yükleniyor" olarak kalırdı. */
       bootstrapping = false;
+      loadingFor = null;
+      render();
     }
   }
 
@@ -2303,6 +2363,9 @@
   async function refreshFromCloud() {
     if (!sb || !auth.user || !auth.ready || bootstrapping) return;
     if (pendingSave || saveTimer || pushInFlight || pushQueued) return;
+    /* Açılıştaki yükleme hiç başarılamadıysa (ör. çevrimdışı giriş) yükleme ve
+       göç kararı yeniden verilir; yoksa hesap verisi bir daha ekrana gelmez. */
+    if (loadedFor !== auth.user.id) { await bootstrapLoad(); return; }
     const res = await Cloud.load();
     if (!res.ok || !res.row) return;
     const remoteState = res.row.data;
@@ -2408,9 +2471,14 @@
       setSyncStatus('signed-out');
       render();
     }
-    sb.auth.onAuthStateChange(function (event, session) {
+    sb.auth.onAuthStateChange(async function (event, session) {
       if (event === 'SIGNED_OUT') {
-        if (auth.user) onSignedOut(); // kapalıysa ikinci kez çalıştırma
+        /* Oturum kendiliğinden düştüyse bekleyen değişiklik yerel önbelleğe
+           (ve ulaşabiliyorsa buluta) yazılmadan ekran temizlenmesin. */
+        if (auth.user) {
+          try { await flushSave(); } catch (e) { /* yoksay */ }
+          onSignedOut(); // kapalıysa ikinci kez çalıştırma
+        }
         return;
       }
       if (event === 'SIGNED_IN' && session && session.user) handleSignedIn(session.user);

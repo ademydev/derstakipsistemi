@@ -590,6 +590,8 @@ textarea { resize: vertical; min-height: 64px; line-height: 1.45; }
 /* --------------------------- 19) BULUT SENKRONİZASYONU ------------------ */
 #sync-status.is-error { color: var(--danger); }
 .form__error { margin-top: 8px; font-size: 13px; color: var(--danger); }
+/* Hata/çevrimdışı durumundaki yazıya tıklayınca işlem yeniden denenir. */
+#sync-status[data-action="retry-cloud"] { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 
 
 
