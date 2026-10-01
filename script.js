@@ -1,5 +1,5 @@
 /* =========================================================================
-   Kişisel Ders Programı — script.js
+   Ders Takip Sistemi — script.js
    İstemci tarafında çalışır: Supabase Authentication + program_state (JSONB,
    RLS korumalı) ile cihazlar arası senkronizasyon yapar.
    Veriler buluta kaydedilir; localStorage/IndexedDB önbellek ve yedek olarak
