@@ -37,8 +37,7 @@
   /* Dersin içindeki listeler: hangisi boşsa arayüzde hiç görünmez. */
   const LISTS = {
     topics: { title: 'Konular', add: 'Konu Ekle', checkable: true, placeholder: 'Örn. Fonksiyonlar' },
-    goals: { title: 'Soru Hedefleri', add: 'Soru Hedefi Ekle' },
-    homeworks: { title: 'Ödevler', add: 'Ödev Ekle', checkable: true, placeholder: 'Örn. 30 matematik sorusu çöz' },
+    homeworks: { title: 'Ödevler', add: 'Ödev Ekle', checkable: true, placeholder: 'Örn. Sayfa 40–45 arası alıştırmalar' },
     repeats: { title: 'Tekrarlar', add: 'Tekrar Ekle', checkable: true, placeholder: 'Örn. Konu tekrarı' },
     notes: { title: 'Notlar', add: 'Not Ekle', placeholder: 'Notunu yaz…' },
     sources: { title: 'Kaynaklar', add: 'Kaynak Ekle', placeholder: 'Örn. 3D Yayınları' }
@@ -63,7 +62,13 @@
     download: icon('<path d="M12 4v10m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/>'),
     upload: icon('<path d="M12 15V5m0 0 4 4m-4-4-4 4"/><path d="M5 19h14"/>'),
     info: icon('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
-    calendar: icon('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/>')
+    calendar: icon('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/>'),
+    sun: icon('<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M18.5 5.5l-1.4 1.4M6.9 17.1l-1.4 1.4"/>'),
+    moon: icon('<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z"/>'),
+    school: icon('<path d="M3 10l9-4 9 4-9 4-9-4Z"/><path d="M7 12.4V17c0 1.1 2.2 2 5 2s5-.9 5-2v-4.6"/>'),
+    book: icon('<path d="M6 4h11a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2V4Z"/><path d="M6 4v16"/><path d="M10 8h5"/>'),
+    sliders: icon('<path d="M4 7h9M17 7h3M4 17h5M13 17h7"/><circle cx="15" cy="7" r="2"/><circle cx="11" cy="17" r="2"/>'),
+    trend: icon('<path d="M4 16l5-5 3 3 7-7"/><path d="M15 7h4v4"/>')
   };
 
   /* ----------------------------- Yardımcılar ----------------------------- */
@@ -86,8 +91,8 @@
   }
   function todayDayId() { return WEEKDAY_INDEX_TO_DAY[new Date().getDay()]; }
 
-  /* Bugünün yerel tarih anahtarı (YYYY-AA-GG). Günlük soru hedeflerinin
-     sıfırlanma kontrolü bu anahtarla yapılır: gece 00:00’da anahtar değişir. */
+  /* Bugünün yerel tarih anahtarı (YYYY-AA-GG). Gün değişimi (gece 00:00)
+     bu anahtarla izlenir; sekme açıkken arayüz yeni güne göre yeniden çizilir. */
   function todayKey() {
     const d = new Date();
     const pad = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -385,7 +390,6 @@
       id, name, slot: 'morning' | 'school' | 'evening',
       teacher: '', time: '', description: '',
       topics: [{ id, text, done }],
-      goals: [{ id, text, target, done, daily, doneOn }],
       homeworks: [{ id, text, done }],
       repeats: [{ id, text, done }],
       notes: [{ id, text }],
@@ -405,15 +409,6 @@
     if (!isPlainObject(item)) return null;
     const out = { id: typeof item.id === 'string' && item.id ? item.id : uid('i'), text: String(item.text || '') };
     if (kind !== 'notes' && kind !== 'sources') out.done = !!item.done;
-    if (kind === 'goals') {
-      out.target = Math.max(1, intOr(item.target, 1));
-      out.done = clamp(intOr(item.done, 0), 0, out.target);
-      /* Hedef tek tikle tamamlanır. daily = true ise tamamlanma yalnızca
-         tamamlandığı gün (doneOn) geçerlidir; ertesi gün kendiliğinden boşalır.
-         Eski kayıtlarda alan yok → günlük hedef kabul edilir. */
-      out.daily = item.daily !== false;
-      out.doneOn = (typeof item.doneOn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.doneOn)) ? item.doneOn : null;
-    }
     return out;
   }
 
@@ -541,46 +536,54 @@
   function slotsWithContent(dayId) {
     return SLOT_IDS.filter(function (slotId) { return coursesOf(dayId, slotId).length > 0; });
   }
-  /* Soru hedefi = tek tik: done == target ise hedef tamamlandı sayılır.
-     Günlük hedeflerde tamamlanma yalnızca tamamlandığı gün geçerlidir;
-     gece yarısından sonra hedef yeniden boş (tiklenmemiş) görünür. */
-  function isDailyGoal(goal) { return goal.daily !== false; }
-  function goalComplete(goal) {
-    if (intOr(goal.done, 0) < goal.target) return false;
-    return !isDailyGoal(goal) || goal.doneOn === todayKey();
-  }
-  function goalDone(goal) { return goalComplete(goal) ? goal.target : 0; }
-  function goalLabel(goal) {
-    const count = goal.target + ' Soru';
-    const text = String(goal.text || '').trim();
-    return text ? text + ' · ' + count : count;
+  /* -------- İstatistikler (konu / ödev / tekrar maddeleri üzerinden) ------ */
+  const TRACKED_LISTS = ['topics', 'homeworks', 'repeats'];
+
+  /* Verilen derslerin tamamlanmış/toplam madde sayısını çıkarır. */
+  function completionTotals(courses) {
+    let total = 0;
+    let done = 0;
+    courses.forEach(function (course) {
+      TRACKED_LISTS.forEach(function (key) {
+        course[key].forEach(function (item) { total += 1; if (item.done) done += 1; });
+      });
+    });
+    return { total: total, done: done };
   }
 
-  function goalsTotals(course) {
-    let target = 0;
-    let done = 0;
-    course.goals.forEach(function (g) { target += g.target; done += goalDone(g); });
-    return { target: target, done: done };
+  /* Saat alanı serbest metindir ("05:00 – 07:30" gibi). İki saat okunabiliyorsa
+     süreyi dakika cinsinden döndürür; aksi hâlde 0 (süre hesaplanmaz). */
+  function timeToMinutes(value) {
+    const match = String(value || '').match(/(\d{1,2})[:.](\d{2})/);
+    if (!match) return null;
+    const hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    if (hours > 23 || minutes > 59) return null;
+    return hours * 60 + minutes;
   }
-  function courseSummary(course) {
-    const parts = [];
-    if (course.topics.length) {
-      parts.push(course.topics.filter(function (t) { return t.done; }).length + '/' + course.topics.length + ' konu');
-    }
-    if (course.goals.length) {
-      const totals = goalsTotals(course);
-      parts.push(totals.done + '/' + totals.target + ' soru');
-    }
-    if (course.homeworks.length) {
-      parts.push(course.homeworks.filter(function (h) { return h.done; }).length + '/' + course.homeworks.length + ' ödev');
-    }
-    if (course.repeats.length) {
-      parts.push(course.repeats.filter(function (r) { return r.done; }).length + '/' + course.repeats.length + ' tekrar');
-    }
-    return parts;
+  function courseMinutes(course) {
+    const found = String(course.time || '').match(/\d{1,2}[:.]\d{2}/g);
+    if (!found || found.length < 2) return 0;
+    const start = timeToMinutes(found[0]);
+    const end = timeToMinutes(found[found.length - 1]);
+    if (start === null || end === null || end <= start) return 0;
+    return end - start;
   }
+  function totalMinutes(entries) {
+    let total = 0;
+    (entries || allCourses()).forEach(function (entry) { total += courseMinutes(entry.course); });
+    return total;
+  }
+  function formatDuration(minutes) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours && mins) return hours + ' saat ' + mins + ' dakika';
+    if (hours) return hours + ' saat';
+    return mins + ' dakika';
+  }
+
   function counts() {
-    const out = { courses: 0, topics: 0, goals: 0, homeworks: 0, repeats: 0, notes: 0, sources: 0 };
+    const out = { courses: 0, topics: 0, homeworks: 0, repeats: 0, notes: 0, sources: 0 };
     allCourses().forEach(function (entry) {
       out.courses += 1;
       Object.keys(LISTS).forEach(function (key) { out[key] += entry.course[key].length; });
@@ -701,7 +704,7 @@
     return true;
   }
 
-  /* --------------- Liste işlemleri (konu, ödev, not, hedef …) ------------ */
+  /* --------------- Liste işlemleri (konu, ödev, not, kaynak …) ----------- */
   function listAdd(courseId, key, values) {
     const found = findCourse(courseId);
     if (!found) return null;
@@ -719,10 +722,6 @@
     const item = found.course[key].find(function (i) { return i.id === itemId; });
     if (!item) return null;
     Object.assign(item, values);
-    if (key === 'goals') {
-      item.target = Math.max(1, intOr(item.target, 1));
-      item.done = clamp(intOr(item.done, 0), 0, item.target);
-    }
     found.course.updatedAt = nowISO();
     save();
     return item;
@@ -758,25 +757,6 @@
     found.course[snapshot.key].splice(snapshot.index, 0, snapshot.item);
     found.course.updatedAt = nowISO();
     save();
-  }
-
-  /* Hedef tek tikle tamamlanır (ör. 30 soru çözülünce bir kez tik). Tik
-     kaldırılınca hedef yeniden boşalır; günlük hedefte tarih de silinir. */
-  function goalToggle(courseId, itemId) {
-    const found = findCourse(courseId);
-    if (!found) return null;
-    const goal = found.course.goals.find(function (g) { return g.id === itemId; });
-    if (!goal) return null;
-    if (goalComplete(goal)) {
-      goal.done = 0;
-      goal.doneOn = null;
-    } else {
-      goal.done = goal.target;
-      goal.doneOn = todayKey();
-    }
-    found.course.updatedAt = nowISO();
-    save();
-    return goal;
   }
 
   /* ------------------------ Arayüz durumu yardımcıları ------------------- */
@@ -819,8 +799,8 @@
   }
 
   /* -------------------------------- Render ------------------------------- */
-  /* Gece yarısı bekçisi: günlük soru hedefi 00:00’dan sonra boş görünür.
-     Yalnızca arayüz yeniden çizilir; hiçbir veri değiştirilmez/yazılmaz. */
+  /* Gece yarısı bekçisi: sekme açıkken gün değişince ("Bugün" vurgusu,
+     tarihler) arayüz yeniden çizilir. Veriye dokunulmaz/yazılmaz. */
   let drawnDayKey = todayKey();
   function checkDayRollover() {
     const key = todayKey();
@@ -881,30 +861,53 @@
   }
 
   /* ---------------------------- Ortak parçalar --------------------------- */
-  function slotChip(slotId) {
-    return '<span class="chip chip--' + slotId + '">' + SLOTS[slotId].label + '</span>';
+  /* Bölüm (Sabah / Okul / Akşam) görsel kimliği: ikon + etiket + ipucu. */
+  const SLOT_UI = {
+    morning: { label: 'Sabah', icon: ICONS.sun, hint: 'Sabah çalışması' },
+    school: { label: 'Okul', icon: ICONS.school, hint: 'Okul dersi' },
+    evening: { label: 'Akşam', icon: ICONS.moon, hint: 'Akşam çalışması' }
+  };
+
+  /* Bölüm başlığındaki küçük "+": doğrudan o günün o bölümüne ekler.
+     Mevcut ders ekleme modalını (new-course) kullanır; yeni veri yolu açmaz. */
+  function slotAddButton(dayId, slotId) {
+    const label = SLOT_UI[slotId].hint + ' ekle';
+    return '<button type="button" class="slot__add" data-action="new-course" data-day="' + esc(dayId) +
+      '" data-slot="' + esc(slotId) + '" title="' + esc(label) + '" aria-label="' + esc(label) + '">' +
+      ICONS.plus + '</button>';
   }
 
-  /* Bölüm bir kez kullanıldıysa (o bölümde herhangi bir ders varsa) kullanıcı
-     özelliği keşfetmiş sayılır: ekleme butonu küçülür ve sadeleşir. */
-  function slotDiscovered(slotId) {
-    return DAYS.some(function (day) { return coursesOf(day.id, slotId).length > 0; });
+  /* Boş günün kısa ekleme butonları (Sabah / Okul / Akşam). */
+  function quickAddButton(dayId, slotId) {
+    const meta = SLOT_UI[slotId];
+    return '<button type="button" class="quick-add quick-add--' + slotId + '" data-action="new-course" data-day="' +
+      esc(dayId) + '" data-slot="' + esc(slotId) + '">' + ICONS.plus + esc(meta.label) + '</button>';
   }
 
-  function addCourseButton(label, dayId, slotId, compact) {
-    return '<button type="button" class="btn-add' + (compact ? ' btn-add--mini' : '') +
-      '" data-action="new-course" data-day="' + esc(dayId) +
-      '" data-slot="' + esc(slotId) + '"' +
-      (compact ? ' title="' + esc(label + ' çalışması ekle') + '" aria-label="' + esc(label + ' çalışması ekle') + '"' : '') +
-      '">' + ICONS.plus + esc(label) + '</button>';
+  /* Gün başlığındaki tarih: haftanın ilgili günü (Pazartesi başlangıçlı). */
+  function mondayThisWeek() {
+    const now = new Date();
+    const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const offset = (base.getDay() + 6) % 7;
+    base.setDate(base.getDate() - offset);
+    return base;
+  }
+  function dayDate(dayId) {
+    const index = DAYS.findIndex(function (d) { return d.id === dayId; });
+    const base = mondayThisWeek();
+    base.setDate(base.getDate() + Math.max(0, index));
+    return base;
+  }
+  function formatDayDate(date) {
+    try { return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }); }
+    catch (e) { return date.getDate() + '.' + (date.getMonth() + 1); }
   }
 
-  function renderCourseCard(course, dayId, options) {
-    const opts = options || {};
+  /* Ders kartı — yalnızca ders adı, saat ve öğretmen gösterir. */
+  function renderCourseCard(course, dayId) {
     const meta = [];
-    if (course.time) meta.push('<span>' + ICONS.clock + esc(course.time) + '</span>');
-    if (course.teacher) meta.push('<span>' + ICONS.user + esc(course.teacher) + '</span>');
-    courseSummary(course).forEach(function (part) { meta.push('<span>' + esc(part) + '</span>'); });
+    if (course.time) meta.push('<span class="course__time">' + ICONS.clock + esc(course.time) + '</span>');
+    if (course.teacher) meta.push('<span class="course__teacher">' + ICONS.user + esc(course.teacher) + '</span>');
 
     return '<div class="course" draggable="true" role="button" tabindex="0"' +
         ' data-action="open-course" data-id="' + esc(course.id) +
@@ -915,7 +918,6 @@
         '<span class="course__name">' + esc(course.name) + '</span>' +
         (meta.length ? '<span class="course__meta">' + meta.join('') + '</span>' : '') +
       '</div>' +
-      (!opts.withHeaders && course.slot !== 'school' ? slotChip(course.slot) : '') +
       '<div class="course__tools">' +
         '<button type="button" class="mini" data-action="shift-course" data-id="' + esc(course.id) +
           '" data-delta="-1" title="Yukarı taşı" aria-label="Yukarı taşı">' + ICONS.up + '</button>' +
@@ -925,53 +927,74 @@
     '</div>';
   }
 
-  function renderSlot(dayId, slotId, withHeaders) {
+  /* Bir bölüm: kompakt başlık (ikon + ad + sayı + "+") ve ders kartları.
+     Boş bölümde yalnızca başlık görünür; sürükleme için gizli bırakma alanı kalır. */
+  function renderSlot(dayId, slotId) {
     const courses = coursesOf(dayId, slotId);
+    const meta = SLOT_UI[slotId];
     const attrs = ' data-drop="slot" data-day="' + esc(dayId) + '" data-slot="' + esc(slotId) + '"';
-    if (!courses.length) {
-      return '<div class="slot slot--empty"' + attrs + '>' + SLOTS[slotId].label + ' bölümüne bırak</div>';
-    }
-    return '<div class="slot"' + attrs + '>' +
-      (withHeaders ? '<div class="slot__title">' + SLOTS[slotId].label + '</div>' : '') +
-      '<div class="slot__list">' +
-        courses.map(function (course) {
-          return renderCourseCard(course, dayId, { withHeaders: withHeaders });
-        }).join('') +
+    return '<section class="slot slot--' + slotId + '"' + attrs + '>' +
+      '<div class="slot__head">' +
+        '<span class="slot__icon slot__icon--' + slotId + '" aria-hidden="true">' + meta.icon + '</span>' +
+        '<span class="slot__title">' + esc(meta.label) + '</span>' +
+        (courses.length ? '<span class="slot__count">' + courses.length + '</span>' : '') +
+        slotAddButton(dayId, slotId) +
       '</div>' +
-    '</div>';
+      (courses.length
+        ? '<div class="slot__list">' + courses.map(function (course) {
+            return renderCourseCard(course, dayId);
+          }).join('') + '</div>'
+        : '<div class="slot__empty"><span>' + esc(meta.label) + ' bölümüne bırak</span></div>') +
+    '</section>';
+  }
+
+  /* Boş günün gizli bırakma alanları: sürükleme sırasında görünür
+     (mevcut sürükle-bırak özelliği boş günlerde de çalışmaya devam eder). */
+  function emptyDropZones(dayId, slots) {
+    return slots.map(function (slotId) {
+      return '<div class="slot__empty" data-drop="slot" data-day="' + esc(dayId) + '" data-slot="' + esc(slotId) + '">' +
+        '<span>' + esc(SLOT_UI[slotId].label) + ' bölümüne bırak</span></div>';
+    }).join('');
   }
 
   function renderDay(dayId, options) {
-    const opts = Object.assign({
-      slots: SLOT_IDS,
-      withHeaders: 'auto',
-      footer: 'default',
-      highlightToday: false
-    }, options || {});
-    const present = slotsWithContent(dayId);
-    const total = state.days[dayId].courses.length;
-    const withHeaders = opts.withHeaders === 'auto' ? present.length > 1 : !!opts.withHeaders;
-    const slots = opts.slots === 'present' ? present : opts.slots;
+    const opts = Object.assign({ slots: SLOT_IDS, highlightToday: false, emptyQuickAdd: true }, options || {});
+    const slots = opts.slots === 'present' ? slotsWithContent(dayId) : opts.slots;
+    const total = slots.reduce(function (sum, slotId) { return sum + coursesOf(dayId, slotId).length; }, 0);
+    const isToday = !!opts.highlightToday;
 
-    const footers = [];
-    if (opts.footer === 'default' || opts.footer === 'school') {
-      footers.push(addCourseButton('Ders Ekle', dayId, 'school'));
-    } else if (opts.footer === 'study') {
-      const morningFound = slotDiscovered('morning');
-      const eveningFound = slotDiscovered('evening');
-      footers.push(addCourseButton(morningFound ? 'Sabah' : 'Sabah Çalışması Ekle', dayId, 'morning', morningFound));
-      footers.push(addCourseButton(eveningFound ? 'Akşam' : 'Akşam Çalışması Ekle', dayId, 'evening', eveningFound));
+    let body;
+    if (total) {
+      body = '<div class="day__body">' + slots.map(function (slotId) {
+        return renderSlot(dayId, slotId);
+      }).join('') + '</div>';
+    } else {
+      /* Boş gün: büyük boşluk yerine sade bir empty state + hızlı ekleme. */
+      const hasStudy = slots.indexOf('morning') >= 0 && slots.indexOf('evening') >= 0;
+      const quickSlots = hasStudy ? ['morning', 'evening'] : slots;
+      body = '<div class="day__body day__body--empty">' +
+        '<p class="day__empty">' + esc(opts.emptyText || 'Henüz çalışma planı yok') + '</p>' +
+        (opts.emptyQuickAdd
+          ? '<div class="day__quick">' + quickSlots.map(function (slotId) {
+              return quickAddButton(dayId, slotId);
+            }).join('') + '</div>'
+          : '') +
+        emptyDropZones(dayId, slots) +
+      '</div>';
     }
 
-    return '<article class="day' + (opts.highlightToday ? ' day--today' : '') + '" data-day="' + esc(dayId) + '">' +
+    return '<article class="day' + (isToday ? ' day--today' : '') + '" data-day="' + esc(dayId) + '">' +
       '<header class="day__head">' +
-        '<h3 class="day__title">' + esc(DAY_BY_ID[dayId].label) + '</h3>' +
-        (total ? '<span class="day__count">' + total + ' ders</span>' : '') +
+        '<div class="day__id">' +
+          '<h3 class="day__title">' + esc(DAY_BY_ID[dayId].label) + '</h3>' +
+          '<span class="day__date">' + esc(formatDayDate(dayDate(dayId))) + '</span>' +
+        '</div>' +
+        '<div class="day__tags">' +
+          (isToday ? '<span class="day__badge">Bugün</span>' : '') +
+          (total ? '<span class="day__count">' + total + '</span>' : '') +
+        '</div>' +
       '</header>' +
-      '<div class="day__body">' +
-        slots.map(function (slotId) { return renderSlot(dayId, slotId, withHeaders); }).join('') +
-      '</div>' +
-      (footers.length ? '<div class="day__foot">' + footers.join('') + '</div>' : '') +
+      body +
     '</article>';
   }
 
@@ -980,7 +1003,7 @@
     return '<div class="empty">' +
       '<h3>Henüz ders eklemedin.</h3>' +
       '<p>Program tamamen boş. Hazır ders listesi yok: yalnızca senin eklediğin dersler görünür. ' +
-      'İstediğin güne istediğin kadar ders ekleyebilir, her dersi konu, ödev, soru hedefi ve notlarla detaylandırabilirsin.</p>' +
+      'İstediğin güne istediğin kadar ders ekleyebilir, her dersi konu, ödev ve notlarla detaylandırabilirsin.</p>' +
       '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' +
         esc(todayDayId()) + '" data-slot="school">' + ICONS.plus + 'İlk Dersi Ekle</button>' +
     '</div>';
@@ -989,7 +1012,7 @@
   function pendingItems(dayId) {
     const out = [];
     state.days[dayId].courses.forEach(function (course) {
-      ['topics', 'homeworks', 'repeats'].forEach(function (key) {
+      TRACKED_LISTS.forEach(function (key) {
         course[key].forEach(function (item) {
           if (!item.done) {
             out.push({ course: course, key: key, item: item });
@@ -998,6 +1021,112 @@
       });
     });
     return out;
+  }
+
+  /* ------------------------------ Özet alanı ---------------------------- */
+  /* Küçük istatistik kutusu (etiket + büyük değer + alt satır). */
+  function statCard(label, value, sub, tone) {
+    return '<div class="stat' + (tone ? ' stat--' + tone : '') + '">' +
+      '<span class="stat__label">' + esc(label) + '</span>' +
+      '<span class="stat__value">' + esc(value) + '</span>' +
+      (sub ? '<span class="stat__sub">' + esc(sub) + '</span>' : '') +
+    '</div>';
+  }
+  function progressCard(label, pct, sub) {
+    const value = clamp(pct, 0, 100);
+    return '<div class="stat stat--progress">' +
+      '<span class="stat__label">' + esc(label) + '</span>' +
+      '<span class="stat__value">' + value + '%</span>' +
+      '<span class="progress"><span class="progress__bar" style="width:' + value + '%"></span></span>' +
+      (sub ? '<span class="stat__sub">' + esc(sub) + '</span>' : '') +
+    '</div>';
+  }
+
+  function weekStats() {
+    const entries = allCourses();
+    const totals = completionTotals(entries.map(function (entry) { return entry.course; }));
+    return {
+      courses: entries.length,
+      tasks: totals.total,
+      done: totals.done,
+      pct: totals.total ? Math.round((totals.done / totals.total) * 100) : 0,
+      minutes: totalMinutes(entries)
+    };
+  }
+  function dayStats(dayId) {
+    const courses = state.days[dayId].courses;
+    const totals = completionTotals(courses);
+    return {
+      courses: courses.length,
+      school: coursesOf(dayId, 'school').length,
+      study: coursesOf(dayId, 'morning').length + coursesOf(dayId, 'evening').length,
+      tasks: totals.total,
+      done: totals.done,
+      pct: totals.total ? Math.round((totals.done / totals.total) * 100) : 0
+    };
+  }
+
+  /* Haftalık özet: toplam çalışma, tamamlanan, ilerleme ve toplam süre. */
+  function renderWeekSummary() {
+    const s = weekStats();
+    const cards = [
+      statCard('Toplam Çalışma', String(s.courses), 'ders / çalışma', 'indigo'),
+      statCard('Tamamlanan', String(s.done), s.tasks + ' görevden', 'ok'),
+      progressCard('Genel İlerleme', s.pct, s.done + '/' + s.tasks + ' görev')
+    ];
+    if (s.minutes > 0) cards.push(statCard('Toplam Süre', formatDuration(s.minutes), 'planlanan', 'mor'));
+    return '<div class="summary">' + cards.join('') + '</div>';
+  }
+
+  /* Bugünün özeti: ders, çalışma, tamamlanan ve günlük ilerleme. */
+  function renderTodaySummary(dayId) {
+    const s = dayStats(dayId);
+    return '<section class="panel panel--summary">' +
+      '<h3>Bugünün Özeti</h3>' +
+      '<div class="summary summary--stack">' +
+        statCard('Bugünkü Ders', String(s.school), 'okul', 'indigo') +
+        statCard('Bugünkü Çalışma', String(s.study), 'sabah + akşam', 'mor') +
+        statCard('Tamamlanan', String(s.done), s.tasks + ' görevden', 'ok') +
+        progressCard('Günlük İlerleme', s.pct, s.done + '/' + s.tasks) +
+      '</div>' +
+    '</section>';
+  }
+
+  /* Sıradaki çalışmalar (yarından itibaren). Bugünün kartıyla tekrar etmez. */
+  function upcomingEntries(limit) {
+    const startIndex = DAYS.findIndex(function (d) { return d.id === todayDayId(); });
+    const out = [];
+    for (let offset = 1; offset < DAYS.length && out.length < limit; offset += 1) {
+      const day = DAYS[(startIndex + offset) % DAYS.length];
+      const list = state.days[day.id].courses.slice().sort(function (a, b) {
+        const ta = timeToMinutes(a.time);
+        const tb = timeToMinutes(b.time);
+        if (ta === null && tb === null) return 0;
+        if (ta === null) return 1;
+        if (tb === null) return -1;
+        return ta - tb;
+      });
+      list.forEach(function (course) {
+        if (out.length < limit) out.push({ day: day, course: course });
+      });
+    }
+    return out;
+  }
+  function renderUpcoming() {
+    const entries = upcomingEntries(5);
+    if (!entries.length) return '';
+    return '<section class="panel panel--upcoming">' +
+      '<h3>Yaklaşan Görevler</h3>' +
+      '<ul class="upcoming">' +
+        entries.map(function (entry) {
+          return '<li class="upcoming__item">' +
+            '<span class="upcoming__day">' + esc(entry.day.short) + '</span>' +
+            '<span class="upcoming__name">' + esc(entry.course.name) + '</span>' +
+            (entry.course.time ? '<span class="upcoming__time">' + esc(entry.course.time) + '</span>' : '') +
+          '</li>';
+        }).join('') +
+      '</ul>' +
+    '</section>';
   }
 
   /* --------------------------- Haftalık görünüm -------------------------- */
@@ -1019,13 +1148,13 @@
             '" data-slot="school">' + ICONS.plus + 'Ders Ekle</button>' +
         '</div>' +
       '</div>' +
-      (empty ? renderEmptyState() : '') +
+      (empty ? renderEmptyState() : renderWeekSummary()) +
       '<div class="week">' +
         DAYS.map(function (day) {
           return renderDay(day.id, { highlightToday: day.id === todayId });
         }).join('') +
       '</div>' +
-      '<p class="hint hint--block">Ders kartına tıklayarak detayları (konu, ödev, soru hedefi, not) açabilirsin. ' +
+      '<p class="hint hint--block">Ders kartına tıklayarak detayları (konu, ödev, not) açabilirsin. ' +
       'Kartları sürükleyerek veya kart üzerindeki oklarla sırasını değiştirebilirsin.</p>' +
     '</section>';
   }
@@ -1039,7 +1168,7 @@
     const pendingPanel = pending.length
       ? '<section class="panel">' +
           '<h3>Yapılacaklar</h3>' +
-          '<p class="panel__sub">Bugünkü derslerinden tamamlanmamış ' + pending.length + ' madde.</p>' +
+          '<p class="panel__sub">Bugünkü çalışmalarından tamamlanmamış ' + pending.length + ' madde.</p>' +
           '<div class="list">' +
             pending.map(function (entry) {
               return '<div class="item">' +
@@ -1070,9 +1199,9 @@
       '</div>' +
       (total ? '' : '<div class="empty"><h3>Bugün için ders yok.</h3>' +
         '<p>' + esc(DAY_BY_ID[dayId].label) + ' gününe ders eklemek için yukarıdaki butonu kullanabilirsin.</p></div>') +
-      (pendingPanel ? '<div class="panels panels--stack">' + pendingPanel + '</div>' : '') +
+      '<div class="panels">' + renderTodaySummary(dayId) + renderUpcoming() + pendingPanel + '</div>' +
       '<div class="week week--single mt">' +
-        renderDay(dayId, { footer: 'study', highlightToday: true }) +
+        renderDay(dayId, { highlightToday: true }) +
       '</div>' +
     '</section>';
   }
@@ -1102,7 +1231,7 @@
         DAYS.map(function (day) {
           return renderDay(day.id, {
             slots: ['school'],
-            footer: 'school',
+            emptyText: 'Henüz okul dersi yok',
             highlightToday: day.id === todayId
           });
         }).join('') +
@@ -1118,22 +1247,20 @@
     });
     return '<section class="page">' +
       pageHeader('Çalışma Programım',
-        'Sabah: okul öncesi ön hazırlık · Okul: derslerin işlenmesi · Akşam: tekrar ve soru çözümü',
+        'Sabah: güne hazırlık · Akşam: tekrar ve pekiştirme',
         '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' + esc(todayId) +
           '" data-slot="evening">' + ICONS.plus + 'Çalışma Ekle</button>') +
       '<div class="notice">' + ICONS.info +
         '<span>Sabah bölümüne o gün okulda göreceğin derslerin ön hazırlığını, akşam bölümüne ' +
-        'işlediğin derslerin tekrarını ve soru çözümünü ekle. Bu iki bölüm okul programından bağımsızdır.</span></div>' +
+        'işlediğin derslerin tekrarını ve pekiştirme çalışmalarını ekle. Bu iki bölüm okul programından bağımsızdır.</span></div>' +
       (hasAny ? '' : '<div class="empty">' +
         '<h3>Çalışma planın henüz boş.</h3>' +
-        '<p>Bir günün altındaki “Sabah Çalışması Ekle” veya “Akşam Çalışması Ekle” butonlarını kullanarak ' +
+        '<p>Bir günün Sabah veya Akşam bölümündeki “+” butonunu kullanarak ' +
         'kendi çalışma düzenini oluştur.</p></div>') +
       '<div class="week mt">' +
         DAYS.map(function (day) {
           return renderDay(day.id, {
             slots: ['morning', 'evening'],
-            withHeaders: true,
-            footer: 'study',
             highlightToday: day.id === todayId
           });
         }).join('') +
@@ -1191,7 +1318,6 @@
           '<dl class="kv">' +
             '<dt>Ders</dt><dd>' + c.courses + '</dd>' +
             '<dt>Konu</dt><dd>' + c.topics + '</dd>' +
-            '<dt>Soru hedefi</dt><dd>' + c.goals + '</dd>' +
             '<dt>Ödev</dt><dd>' + c.homeworks + '</dd>' +
             '<dt>Tekrar</dt><dd>' + c.repeats + '</dd>' +
             '<dt>Not</dt><dd>' + c.notes + '</dd>' +
@@ -1395,26 +1521,14 @@
   }
 
   const SINGULAR = {
-    topics: 'Konu', goals: 'Soru hedefi', homeworks: 'Ödev',
+    topics: 'Konu', homeworks: 'Ödev',
     repeats: 'Tekrar', notes: 'Not', sources: 'Kaynak'
   };
 
   function renderForm(kind, course, item, key) {
     const config = LISTS[kind];
     let field;
-    if (kind === 'goal') {
-      field = '<div class="form__row">' +
-        '<div class="field"><label class="field__label">Hedef (soru sayısı)</label>' +
-          '<input type="number" name="target" min="1" step="1" value="' + (item ? item.target : 20) + '" required></div>' +
-        '<div class="field"><label class="field__label">Etiket (isteğe bağlı)</label>' +
-          '<input type="text" name="text" value="' + esc(item ? item.text : '') +
-          '" placeholder="Örn. TYT matematik"></div>' +
-      '</div>' +
-      '<label class="check"><input type="checkbox" name="daily"' +
-        (item && item.daily === false ? '' : ' checked') + '>' +
-        '<span>Hedef tek tikle tamamlanır (30 soru için 30 kez değil). Bu kutu işaretliyken hedef her gün ' +
-        '00:00’da kendini yeniler; kapatırsan yalnızca bir kez tamamlanır.</span></label>';
-    } else if (kind === 'notes') {
+    if (kind === 'notes') {
       field = '<div class="field"><label class="field__label">Not</label>' +
         '<textarea name="text" required placeholder="' + esc(config.placeholder) + '">' +
         esc(item ? item.text : '') + '</textarea></div>';
@@ -1484,50 +1598,6 @@
     '</section>';
   }
 
-  /* Soru hedefi bölümü: hedef tek tikle tamamlanır (ör. "30 Soru").
-     Günlük hedefler gece yarısından sonra kendini yeniler. */
-  function renderGoalList(course) {
-    const goals = course.goals;
-    const addKey = formKey('goals', null);
-    const addOpen = isFormOpen(addKey);
-    if (!goals.length && !addOpen) return '';
-
-    const rows = goals.map(function (goal) {
-      const editKey = formKey('goal', goal.id);
-      if (isFormOpen(editKey)) return renderForm('goal', course, goal, editKey);
-      const done = goalComplete(goal);
-      const attrs = ' data-course="' + esc(course.id) + '" data-id="' + esc(goal.id) + '"';
-      return '<div class="item' + (done ? ' is-done' : '') + '">' +
-        '<label class="item__check">' +
-          '<input class="item__input" type="checkbox"' + (done ? ' checked' : '') +
-            ' data-action="goal-toggle"' + attrs + '>' +
-          '<span class="box">' + ICONS.check + '</span>' +
-          '<span class="item__text">' + esc(goalLabel(goal)) + '</span>' +
-          (isDailyGoal(goal) ? '<span class="chip chip--hint">her gün</span>' : '') +
-        '</label>' +
-        '<div class="item__tools">' + itemTools(course.id, 'goals', goal.id) + '</div>' +
-      '</div>';
-    }).join('');
-
-    const doneCount = goals.filter(function (g) { return goalComplete(g); }).length;
-
-    return '<section class="section">' +
-      (goals.length
-        ? '<div class="section__head">' +
-            '<span class="section__title">' + esc(LISTS.goals.title) + '</span>' +
-            (goals.length > 1
-              ? '<span class="section__count">' + doneCount + '/' + goals.length + '</span>'
-              : '') +
-            (addOpen ? '' : sectionAddButton(course, addKey, LISTS.goals.add, true)) +
-          '</div>'
-        : '') +
-      (rows ? '<div class="list">' + rows + '</div>' : '') +
-      (addOpen
-        ? renderForm('goal', course, null, addKey)
-        : (goals.length ? '' : sectionAddButton(course, addKey, LISTS.goals.add, false))) +
-    '</section>';
-  }
-
   function renderDrawer() {
     const root = $('#drawer-root');
     if (!ui.drawer) { root.innerHTML = ''; return; }
@@ -1539,7 +1609,6 @@
       renderMetaInfo(course),
       renderQuickAdd(course),
       renderCheckList(course, 'topics'),
-      renderGoalList(course),
       renderCheckList(course, 'homeworks'),
       renderCheckList(course, 'repeats'),
       renderCheckList(course, 'notes'),
@@ -1560,7 +1629,7 @@
         '</header>' +
         '<div class="drawer__body">' +
           (body || '<p class="hint">Bu derse henüz ayrıntı eklemedin. Yukarıdaki “＋ Ekle” seçenekleriyle konu, ' +
-            'ödev, soru hedefi veya not ekleyebilirsin.</p>') +
+            'ödev, tekrar veya not ekleyebilirsin.</p>') +
         '</div>' +
         '<footer class="drawer__foot">' +
           '<button type="button" class="btn btn--sm" data-action="open-course-modal" data-mode="edit" data-id="' +
@@ -1764,9 +1833,7 @@
     if (!found) return;
     const data = new FormData(form);
     const parts = key.split(':');
-    /* Soru hedefi formu 'goals' anahtarıyla açılır ama liste adı 'goals', form türü 'goal'. */
-    const kind = parts[0] === 'goals' ? 'goal' : parts[0];
-    const listKey = kind === 'goal' ? 'goals' : kind;
+    const kind = parts[0];
     const itemId = parts[1] || null;
 
     const meta = META_FIELDS.find(function (f) { return f.key === kind; });
@@ -1781,35 +1848,18 @@
       return;
     }
 
-    if (!LISTS[listKey]) return;
-
-    if (kind === 'goal') {
-      const target = Math.max(1, intOr(data.get('target'), 1));
-      const text = String(data.get('text') || '').trim();
-      const daily = data.get('daily') !== null; // kutu işaretliyse alan gönderilir
-      const patch = { target: target, text: text, daily: daily };
-      if (!daily) patch.doneOn = null;
-      if (itemId) {
-        listUpdate(courseId, 'goals', itemId, patch);
-      } else {
-        listAdd(courseId, 'goals', patch);
-      }
-      closeForm(key);
-      render();
-      toast(itemId ? 'Soru hedefi güncellendi.' : 'Soru hedefi eklendi: ' + target + ' soru.');
-      return;
-    }
+    if (!LISTS[kind]) return;
 
     const text = String(data.get('text') || '').trim();
     if (!text) return;
     if (itemId) {
-      listUpdate(courseId, listKey, itemId, { text: text });
+      listUpdate(courseId, kind, itemId, { text: text });
     } else {
-      listAdd(courseId, listKey, { text: text });
+      listAdd(courseId, kind, { text: text });
     }
     closeForm(key);
     render();
-    toast(itemId ? SINGULAR[listKey] + ' güncellendi.' : SINGULAR[listKey] + ' eklendi.');
+    toast(itemId ? SINGULAR[kind] + ' güncellendi.' : SINGULAR[kind] + ' eklendi.');
   }
 
   function handleCourseSubmit(form) {
@@ -1865,10 +1915,6 @@
   }
 
   /* ------------------------------ Olaylar -------------------------------- */
-  function itemKind(key) {
-    return key === 'goals' ? 'goal' : key;
-  }
-
   function clearToast() {
     const root = $('#toast-root');
     if (root) root.innerHTML = '';
@@ -1923,7 +1969,7 @@
         return true;
 
       case 'edit-item': {
-        const key = formKey(itemKind(trigger.dataset.key), trigger.dataset.id);
+        const key = formKey(trigger.dataset.key, trigger.dataset.id);
         openForm(key);
         ui.focus = 'form[data-form="' + key + '"] input, form[data-form="' + key + '"] textarea';
         render();
@@ -1935,7 +1981,7 @@
         const label = SINGULAR[key] || 'Kayıt';
         const snapshot = listRemove(trigger.dataset.course, key, trigger.dataset.id);
         if (!snapshot) return true;
-        closeForm(formKey(itemKind(key), trigger.dataset.id));
+        closeForm(formKey(key, trigger.dataset.id));
         render();
         toast(label + ' silindi.', {
           actionLabel: 'Geri al',
@@ -1960,17 +2006,13 @@
         return true;
       }
 
-      case 'goal-toggle':
-        if (goalToggle(courseId, trigger.dataset.id)) render();
-        return true;
-
       case 'confirm-delete-course': {
         const found = findCourse(trigger.dataset.id);
         if (!found) return true;
         const name = found.course.name;
         requestConfirm({
           title: '“' + name + '” dersini silmek istediğine emin misin?',
-          text: 'Bu dersin konuları, ödevleri, soru hedefleri, tekrarları ve notları da silinir.',
+          text: 'Bu dersin konuları, ödevleri, tekrarları ve notları da silinir.',
           label: 'Evet, sil',
           onConfirm: function () {
             const snapshot = removeCourse(trigger.dataset.id);
@@ -2086,7 +2128,7 @@
         requestConfirm({
           title: 'Tüm verileri silmek istediğine emin misin?',
           text: auth.user
-            ? 'Hesabındaki bütün dersler, konular, ödevler, hedefler ve notlar silinir (bulut dahil). Bu işlem geri alınamaz. ' +
+            ? 'Hesabındaki bütün dersler, konular, ödevler, tekrarlar ve notlar silinir (bulut dahil). Bu işlem geri alınamaz. ' +
               'Yedek almak istersen önce “Verilerimi dışa aktar” seçeneğini kullanabilirsin.'
             : 'Giriş yapmış değilsin: yalnızca bu cihazdaki dersler, konular, ödevler ve notlar silinir. ' +
               'Hesabındaki program silinmez ve giriş yapınca yeniden görünür. ' +
@@ -2501,8 +2543,8 @@
     });
     window.addEventListener('offline', function () { setSyncStatus('offline'); });
 
-    /* Gece yarısından sonra günlük soru hedefi kendini yeniler: yalnızca
-       arayüz yeniden çizilir, veriye dokunulmaz. */
+    /* Gece yarısından sonra "Bugün" vurgusu ve tarihler yenilenir:
+       yalnızca arayüz yeniden çizilir, veriye dokunulmaz. */
     window.setInterval(checkDayRollover, 30000);
 
     applyTheme();
