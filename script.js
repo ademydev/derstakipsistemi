@@ -37,6 +37,7 @@
   /* Dersin içindeki listeler: hangisi boşsa arayüzde hiç görünmez. */
   const LISTS = {
     topics: { title: 'Konular', add: 'Konu Ekle', checkable: true, placeholder: 'Örn. Fonksiyonlar' },
+    goals: { title: 'Soru Hedefleri', add: 'Soru Hedefi Ekle' },
     homeworks: { title: 'Ödevler', add: 'Ödev Ekle', checkable: true, placeholder: 'Örn. Sayfa 40–45 arası alıştırmalar' },
     repeats: { title: 'Tekrarlar', add: 'Tekrar Ekle', checkable: true, placeholder: 'Örn. Konu tekrarı' },
     notes: { title: 'Notlar', add: 'Not Ekle', placeholder: 'Notunu yaz…' },
@@ -390,6 +391,7 @@
       id, name, slot: 'morning' | 'school' | 'evening',
       teacher: '', time: '', description: '',
       topics: [{ id, text, done }],
+      goals: [{ id, text, target, done, daily, doneOn }],
       homeworks: [{ id, text, done }],
       repeats: [{ id, text, done }],
       notes: [{ id, text }],
@@ -409,6 +411,15 @@
     if (!isPlainObject(item)) return null;
     const out = { id: typeof item.id === 'string' && item.id ? item.id : uid('i'), text: String(item.text || '') };
     if (kind !== 'notes' && kind !== 'sources') out.done = !!item.done;
+    if (kind === 'goals') {
+      out.target = Math.max(1, intOr(item.target, 1));
+      out.done = clamp(intOr(item.done, 0), 0, out.target);
+      /* Hedef tek tikle tamamlanır. daily = true ise tamamlanma yalnızca
+         tamamlandığı gün (doneOn) geçerlidir; ertesi gün kendiliğinden boşalır.
+         Eski kayıtlarda alan yok → günlük hedef kabul edilir. */
+      out.daily = item.daily !== false;
+      out.doneOn = (typeof item.doneOn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.doneOn)) ? item.doneOn : null;
+    }
     return out;
   }
 
@@ -536,54 +547,40 @@
   function slotsWithContent(dayId) {
     return SLOT_IDS.filter(function (slotId) { return coursesOf(dayId, slotId).length > 0; });
   }
-  /* -------- İstatistikler (konu / ödev / tekrar maddeleri üzerinden) ------ */
+  /* -------- Soru hedefleri (günlük hedefler gece yarısı kendiliğinden sıfırlanır) --- */
   const TRACKED_LISTS = ['topics', 'homeworks', 'repeats'];
 
-  /* Verilen derslerin tamamlanmış/toplam madde sayısını çıkarır. */
-  function completionTotals(courses) {
-    let total = 0;
-    let done = 0;
-    courses.forEach(function (course) {
-      TRACKED_LISTS.forEach(function (key) {
-        course[key].forEach(function (item) { total += 1; if (item.done) done += 1; });
-      });
-    });
-    return { total: total, done: done };
+  /* Eski kayıtlarda `daily` alanı yoksa hedef günlük kabul edilir. */
+  function isDailyGoal(goal) { return !goal || goal.daily !== false; }
+
+  /* Günlük hedef yalnızca tamamlandığı gün geçerlidir (doneOn === bugün).
+     Sıfırlama veritabanına yazılmaz, yalnızca okuma anında değerlendirilir. */
+  function goalComplete(goal) {
+    if (!goal) return false;
+    return isDailyGoal(goal) ? (goal.doneOn === todayKey()) : !!goal.done;
   }
 
-  /* Saat alanı serbest metindir ("05:00 – 07:30" gibi). İki saat okunabiliyorsa
-     süreyi dakika cinsinden döndürür; aksi hâlde 0 (süre hesaplanmaz). */
-  function timeToMinutes(value) {
-    const match = String(value || '').match(/(\d{1,2})[:.](\d{2})/);
-    if (!match) return null;
-    const hours = parseInt(match[1], 10);
-    const minutes = parseInt(match[2], 10);
-    if (hours > 23 || minutes > 59) return null;
-    return hours * 60 + minutes;
+  function goalDone(goals) {
+    return (goals || []).filter(function (goal) { return goalComplete(goal); });
   }
-  function courseMinutes(course) {
-    const found = String(course.time || '').match(/\d{1,2}[:.]\d{2}/g);
-    if (!found || found.length < 2) return 0;
-    const start = timeToMinutes(found[0]);
-    const end = timeToMinutes(found[found.length - 1]);
-    if (start === null || end === null || end <= start) return 0;
-    return end - start;
+
+  /* Hedeflerin toplamı: kaç hedef tamamlandı, kaç soru tamamlandı. */
+  function goalsTotals(goals) {
+    const list = goals || [];
+    const doneGoals = goalDone(list);
+    let target = 0;
+    let done = 0;
+    list.forEach(function (goal) { target += Math.max(1, intOr(goal.target, 1)); });
+    doneGoals.forEach(function (goal) { done += Math.max(1, intOr(goal.target, 1)); });
+    return { count: list.length, doneCount: doneGoals.length, target: target, done: done };
   }
-  function totalMinutes(entries) {
-    let total = 0;
-    (entries || allCourses()).forEach(function (entry) { total += courseMinutes(entry.course); });
-    return total;
-  }
-  function formatDuration(minutes) {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (hours && mins) return hours + ' saat ' + mins + ' dakika';
-    if (hours) return hours + ' saat';
-    return mins + ' dakika';
+
+  function goalLabel(goal) {
+    return String(goal.text || '').trim() + ' · ' + Math.max(1, intOr(goal.target, 1)) + ' Soru';
   }
 
   function counts() {
-    const out = { courses: 0, topics: 0, homeworks: 0, repeats: 0, notes: 0, sources: 0 };
+    const out = { courses: 0, topics: 0, goals: 0, homeworks: 0, repeats: 0, notes: 0, sources: 0 };
     allCourses().forEach(function (entry) {
       out.courses += 1;
       Object.keys(LISTS).forEach(function (key) { out[key] += entry.course[key].length; });
@@ -722,6 +719,11 @@
     const item = found.course[key].find(function (i) { return i.id === itemId; });
     if (!item) return null;
     Object.assign(item, values);
+    /* Hedeflerde soru sayısı ve tamamlanma aynı sınırlar içinde tutulur. */
+    if (key === 'goals') {
+      item.target = Math.max(1, intOr(item.target, 1));
+      item.done = clamp(intOr(item.done, 0), 0, item.target);
+    }
     found.course.updatedAt = nowISO();
     save();
     return item;
@@ -757,6 +759,31 @@
     found.course[snapshot.key].splice(snapshot.index, 0, snapshot.item);
     found.course.updatedAt = nowISO();
     save();
+  }
+
+  /* Hedef tek tikle tamamlanır. Günlük hedefte tamamlanma tarihi doneOn'a
+     yazılır; ertesi gün arayüz bunu bugünün tarihi olmadığı için okurken
+     kendiliğinden sıfırlamış sayılır (DB'ye ayrı bir yazma yapılmaz). */
+  function goalToggle(courseId, itemId) {
+    const found = findCourse(courseId);
+    if (!found) return null;
+    const goal = found.course.goals.find(function (g) { return g.id === itemId; });
+    if (!goal) return null;
+    const target = Math.max(1, intOr(goal.target, 1));
+    if (isDailyGoal(goal)) {
+      if (goal.doneOn === todayKey()) { goal.doneOn = null; goal.done = 0; }
+      else { goal.doneOn = todayKey(); goal.done = target; }
+    } else if (goalComplete(goal)) {
+      goal.done = 0;
+      goal.doneOn = null;
+    } else {
+      goal.done = target;
+      goal.doneOn = todayKey();
+    }
+    goal.target = target;
+    found.course.updatedAt = nowISO();
+    save();
+    return goal;
   }
 
   /* ------------------------ Arayüz durumu yardımcıları ------------------- */
@@ -800,7 +827,8 @@
 
   /* -------------------------------- Render ------------------------------- */
   /* Gece yarısı bekçisi: sekme açıkken gün değişince ("Bugün" vurgusu,
-     tarihler) arayüz yeniden çizilir. Veriye dokunulmaz/yazılmaz. */
+     tarihler, soru hedeflerinin günlük sıfırlanması — goalComplete() bugünün
+     tarihine bakar) arayüz yeniden çizilir. Veriye dokunulmaz/yazılmaz. */
   let drawnDayKey = todayKey();
   function checkDayRollover() {
     const key = todayKey();
@@ -1003,7 +1031,7 @@
     return '<div class="empty">' +
       '<h3>Henüz ders eklemedin.</h3>' +
       '<p>Program tamamen boş. Hazır ders listesi yok: yalnızca senin eklediğin dersler görünür. ' +
-      'İstediğin güne istediğin kadar ders ekleyebilir, her dersi konu, ödev ve notlarla detaylandırabilirsin.</p>' +
+      'İstediğin güne istediğin kadar ders ekleyebilir, her dersi konu, soru hedefi, ödev ve notlarla detaylandırabilirsin.</p>' +
       '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' +
         esc(todayDayId()) + '" data-slot="school">' + ICONS.plus + 'İlk Dersi Ekle</button>' +
     '</div>';
@@ -1021,112 +1049,6 @@
       });
     });
     return out;
-  }
-
-  /* ------------------------------ Özet alanı ---------------------------- */
-  /* Küçük istatistik kutusu (etiket + büyük değer + alt satır). */
-  function statCard(label, value, sub, tone) {
-    return '<div class="stat' + (tone ? ' stat--' + tone : '') + '">' +
-      '<span class="stat__label">' + esc(label) + '</span>' +
-      '<span class="stat__value">' + esc(value) + '</span>' +
-      (sub ? '<span class="stat__sub">' + esc(sub) + '</span>' : '') +
-    '</div>';
-  }
-  function progressCard(label, pct, sub) {
-    const value = clamp(pct, 0, 100);
-    return '<div class="stat stat--progress">' +
-      '<span class="stat__label">' + esc(label) + '</span>' +
-      '<span class="stat__value">' + value + '%</span>' +
-      '<span class="progress"><span class="progress__bar" style="width:' + value + '%"></span></span>' +
-      (sub ? '<span class="stat__sub">' + esc(sub) + '</span>' : '') +
-    '</div>';
-  }
-
-  function weekStats() {
-    const entries = allCourses();
-    const totals = completionTotals(entries.map(function (entry) { return entry.course; }));
-    return {
-      courses: entries.length,
-      tasks: totals.total,
-      done: totals.done,
-      pct: totals.total ? Math.round((totals.done / totals.total) * 100) : 0,
-      minutes: totalMinutes(entries)
-    };
-  }
-  function dayStats(dayId) {
-    const courses = state.days[dayId].courses;
-    const totals = completionTotals(courses);
-    return {
-      courses: courses.length,
-      school: coursesOf(dayId, 'school').length,
-      study: coursesOf(dayId, 'morning').length + coursesOf(dayId, 'evening').length,
-      tasks: totals.total,
-      done: totals.done,
-      pct: totals.total ? Math.round((totals.done / totals.total) * 100) : 0
-    };
-  }
-
-  /* Haftalık özet: toplam çalışma, tamamlanan, ilerleme ve toplam süre. */
-  function renderWeekSummary() {
-    const s = weekStats();
-    const cards = [
-      statCard('Toplam Çalışma', String(s.courses), 'ders / çalışma', 'indigo'),
-      statCard('Tamamlanan', String(s.done), s.tasks + ' görevden', 'ok'),
-      progressCard('Genel İlerleme', s.pct, s.done + '/' + s.tasks + ' görev')
-    ];
-    if (s.minutes > 0) cards.push(statCard('Toplam Süre', formatDuration(s.minutes), 'planlanan', 'mor'));
-    return '<div class="summary">' + cards.join('') + '</div>';
-  }
-
-  /* Bugünün özeti: ders, çalışma, tamamlanan ve günlük ilerleme. */
-  function renderTodaySummary(dayId) {
-    const s = dayStats(dayId);
-    return '<section class="panel panel--summary">' +
-      '<h3>Bugünün Özeti</h3>' +
-      '<div class="summary summary--stack">' +
-        statCard('Bugünkü Ders', String(s.school), 'okul', 'indigo') +
-        statCard('Bugünkü Çalışma', String(s.study), 'sabah + akşam', 'mor') +
-        statCard('Tamamlanan', String(s.done), s.tasks + ' görevden', 'ok') +
-        progressCard('Günlük İlerleme', s.pct, s.done + '/' + s.tasks) +
-      '</div>' +
-    '</section>';
-  }
-
-  /* Sıradaki çalışmalar (yarından itibaren). Bugünün kartıyla tekrar etmez. */
-  function upcomingEntries(limit) {
-    const startIndex = DAYS.findIndex(function (d) { return d.id === todayDayId(); });
-    const out = [];
-    for (let offset = 1; offset < DAYS.length && out.length < limit; offset += 1) {
-      const day = DAYS[(startIndex + offset) % DAYS.length];
-      const list = state.days[day.id].courses.slice().sort(function (a, b) {
-        const ta = timeToMinutes(a.time);
-        const tb = timeToMinutes(b.time);
-        if (ta === null && tb === null) return 0;
-        if (ta === null) return 1;
-        if (tb === null) return -1;
-        return ta - tb;
-      });
-      list.forEach(function (course) {
-        if (out.length < limit) out.push({ day: day, course: course });
-      });
-    }
-    return out;
-  }
-  function renderUpcoming() {
-    const entries = upcomingEntries(5);
-    if (!entries.length) return '';
-    return '<section class="panel panel--upcoming">' +
-      '<h3>Yaklaşan Görevler</h3>' +
-      '<ul class="upcoming">' +
-        entries.map(function (entry) {
-          return '<li class="upcoming__item">' +
-            '<span class="upcoming__day">' + esc(entry.day.short) + '</span>' +
-            '<span class="upcoming__name">' + esc(entry.course.name) + '</span>' +
-            (entry.course.time ? '<span class="upcoming__time">' + esc(entry.course.time) + '</span>' : '') +
-          '</li>';
-        }).join('') +
-      '</ul>' +
-    '</section>';
   }
 
   /* --------------------------- Haftalık görünüm -------------------------- */
@@ -1148,13 +1070,13 @@
             '" data-slot="school">' + ICONS.plus + 'Ders Ekle</button>' +
         '</div>' +
       '</div>' +
-      (empty ? renderEmptyState() : renderWeekSummary()) +
+      (empty ? renderEmptyState() : '') +
       '<div class="week">' +
         DAYS.map(function (day) {
           return renderDay(day.id, { highlightToday: day.id === todayId });
         }).join('') +
       '</div>' +
-      '<p class="hint hint--block">Ders kartına tıklayarak detayları (konu, ödev, not) açabilirsin. ' +
+      '<p class="hint hint--block">Ders kartına tıklayarak detayları (konu, soru hedefi, ödev, not) açabilirsin. ' +
       'Kartları sürükleyerek veya kart üzerindeki oklarla sırasını değiştirebilirsin.</p>' +
     '</section>';
   }
@@ -1199,7 +1121,7 @@
       '</div>' +
       (total ? '' : '<div class="empty"><h3>Bugün için ders yok.</h3>' +
         '<p>' + esc(DAY_BY_ID[dayId].label) + ' gününe ders eklemek için yukarıdaki butonu kullanabilirsin.</p></div>') +
-      '<div class="panels">' + renderTodaySummary(dayId) + renderUpcoming() + pendingPanel + '</div>' +
+      (pendingPanel ? '<div class="panels">' + pendingPanel + '</div>' : '') +
       '<div class="week week--single mt">' +
         renderDay(dayId, { highlightToday: true }) +
       '</div>' +
@@ -1318,6 +1240,7 @@
           '<dl class="kv">' +
             '<dt>Ders</dt><dd>' + c.courses + '</dd>' +
             '<dt>Konu</dt><dd>' + c.topics + '</dd>' +
+            '<dt>Soru hedefi</dt><dd>' + c.goals + '</dd>' +
             '<dt>Ödev</dt><dd>' + c.homeworks + '</dd>' +
             '<dt>Tekrar</dt><dd>' + c.repeats + '</dd>' +
             '<dt>Not</dt><dd>' + c.notes + '</dd>' +
@@ -1521,14 +1444,22 @@
   }
 
   const SINGULAR = {
-    topics: 'Konu', homeworks: 'Ödev',
+    topics: 'Konu', goals: 'Soru hedefi', homeworks: 'Ödev',
     repeats: 'Tekrar', notes: 'Not', sources: 'Kaynak'
   };
 
   function renderForm(kind, course, item, key) {
     const config = LISTS[kind];
     let field;
-    if (kind === 'notes') {
+    if (kind === 'goals') {
+      /* Hedef formu: metin + soru sayısı. Kayıt id'si ikinci satırdır. */
+      field = '<div class="field"><label class="field__label">' + esc(SINGULAR[kind]) + '</label>' +
+        '<input type="text" name="text" required value="' + esc(item ? item.text : '') +
+        '" placeholder="Örn. TYT Matematik"></div>' +
+        '<div class="field"><label class="field__label">Soru sayısı</label>' +
+        '<input type="number" name="target" min="1" step="1" required value="' +
+        esc(String(item ? Math.max(1, intOr(item.target, 1)) : 20)) + '"></div>';
+    } else if (kind === 'notes') {
       field = '<div class="field"><label class="field__label">Not</label>' +
         '<textarea name="text" required placeholder="' + esc(config.placeholder) + '">' +
         esc(item ? item.text : '') + '</textarea></div>';
@@ -1539,6 +1470,52 @@
     }
     return '<form class="form" data-action="submit-form" data-form="' + esc(key) +
       '" data-course="' + esc(course.id) + '">' + field + formActions(key) + '</form>';
+  }
+
+  /* Soru hedefleri: tek satırda tik + "hedef · N Soru" + "her gün" etiketi.
+     Günlük hedef, tamamlanma günün sonunda arayüzce okunurken sıfırlanır. */
+  function renderGoalList(course) {
+    const config = LISTS.goals;
+    const goals = course.goals;
+    const addKey = formKey('goals', null);
+    const addOpen = isFormOpen(addKey);
+    if (!goals.length && !addOpen) return '';
+
+    const rows = goals.map(function (goal) {
+      const editKey = formKey('goals', goal.id);
+      if (isFormOpen(editKey)) return renderForm('goals', course, goal, editKey);
+      const done = goalComplete(goal);
+      return '<div class="item' + (done ? ' is-done' : '') + '">' +
+        '<label class="item__check">' +
+          '<input class="item__input" type="checkbox"' + (done ? ' checked' : '') +
+            ' data-action="goal-toggle" data-course="' + esc(course.id) +
+            '" data-key="goals" data-id="' + esc(goal.id) + '">' +
+          '<span class="box">' + ICONS.check + '</span>' +
+          '<span class="item__text">' + esc(goalLabel(goal)) +
+            (isDailyGoal(goal) ? ' <span class="chip chip--hint">her gün</span>' : '') +
+          '</span>' +
+        '</label>' +
+        '<div class="item__tools">' + itemTools(course.id, 'goals', goal.id) + '</div>' +
+      '</div>';
+    }).join('');
+
+    const totals = goalsTotals(goals);
+
+    return '<section class="section">' +
+      (goals.length
+        ? '<div class="section__head">' +
+            '<span class="section__title">' + esc(config.title) + '</span>' +
+            (goals.length > 1
+              ? '<span class="section__count">' + totals.done + '/' + totals.target + ' soru</span>'
+              : '') +
+            (addOpen ? '' : sectionAddButton(course, addKey, config.add, true)) +
+          '</div>'
+        : '') +
+      (rows ? '<div class="list">' + rows + '</div>' : '') +
+      (addOpen
+        ? renderForm('goals', course, null, addKey)
+        : (goals.length ? '' : sectionAddButton(course, addKey, config.add, false))) +
+    '</section>';
   }
 
   /* İçerik varken “X Ekle” yazısı yerine küçük +; içerik yokken açıklayıcı
@@ -1609,6 +1586,7 @@
       renderMetaInfo(course),
       renderQuickAdd(course),
       renderCheckList(course, 'topics'),
+      renderGoalList(course),
       renderCheckList(course, 'homeworks'),
       renderCheckList(course, 'repeats'),
       renderCheckList(course, 'notes'),
@@ -1629,7 +1607,7 @@
         '</header>' +
         '<div class="drawer__body">' +
           (body || '<p class="hint">Bu derse henüz ayrıntı eklemedin. Yukarıdaki “＋ Ekle” seçenekleriyle konu, ' +
-            'ödev, tekrar veya not ekleyebilirsin.</p>') +
+            'soru hedefi, ödev, tekrar veya not ekleyebilirsin.</p>') +
         '</div>' +
         '<footer class="drawer__foot">' +
           '<button type="button" class="btn btn--sm" data-action="open-course-modal" data-mode="edit" data-id="' +
@@ -1852,7 +1830,24 @@
 
     const text = String(data.get('text') || '').trim();
     if (!text) return;
-    if (itemId) {
+
+    if (kind === 'goals') {
+      /* Soru sayısı değişirse tamamlanma da yeni hedefe göre ayarlanır;
+         günlük hedefte tamamlanma günü korunur. */
+      const target = Math.max(1, intOr(data.get('target'), 20));
+      const existing = itemId ? found.course.goals.find(function (g) { return g.id === itemId; }) : null;
+      if (existing) {
+        const wasComplete = goalComplete(existing);
+        listUpdate(courseId, 'goals', itemId, {
+          text: text,
+          target: target,
+          done: wasComplete ? target : 0,
+          doneOn: wasComplete ? (existing.doneOn || todayKey()) : null
+        });
+      } else {
+        listAdd(courseId, 'goals', { text: text, target: target, done: 0, daily: true, doneOn: null });
+      }
+    } else if (itemId) {
       listUpdate(courseId, kind, itemId, { text: text });
     } else {
       listAdd(courseId, kind, { text: text });
@@ -1968,6 +1963,11 @@
         render();
         return true;
 
+      case 'goal-toggle':
+        goalToggle(trigger.dataset.course, trigger.dataset.id);
+        render();
+        return true;
+
       case 'edit-item': {
         const key = formKey(trigger.dataset.key, trigger.dataset.id);
         openForm(key);
@@ -2012,7 +2012,7 @@
         const name = found.course.name;
         requestConfirm({
           title: '“' + name + '” dersini silmek istediğine emin misin?',
-          text: 'Bu dersin konuları, ödevleri, tekrarları ve notları da silinir.',
+          text: 'Bu dersin konuları, soru hedefleri, ödevleri, tekrarları ve notları da silinir.',
           label: 'Evet, sil',
           onConfirm: function () {
             const snapshot = removeCourse(trigger.dataset.id);
@@ -2128,7 +2128,7 @@
         requestConfirm({
           title: 'Tüm verileri silmek istediğine emin misin?',
           text: auth.user
-            ? 'Hesabındaki bütün dersler, konular, ödevler, tekrarlar ve notlar silinir (bulut dahil). Bu işlem geri alınamaz. ' +
+            ? 'Hesabındaki bütün dersler, konular, hedefler, ödevler, tekrarlar ve notlar silinir (bulut dahil). Bu işlem geri alınamaz. ' +
               'Yedek almak istersen önce “Verilerimi dışa aktar” seçeneğini kullanabilirsin.'
             : 'Giriş yapmış değilsin: yalnızca bu cihazdaki dersler, konular, ödevler ve notlar silinir. ' +
               'Hesabındaki program silinmez ve giriş yapınca yeniden görünür. ' +
