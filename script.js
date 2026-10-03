@@ -1367,6 +1367,96 @@
   }
 
   /* ------------------------------ Bugün ---------------------------------- */
+  function renderTodayQuestionProgress(dayId) {
+  const courses = state.days[dayId].courses || [];
+
+  let target = 0;
+  let done = 0;
+  const courseRows = [];
+
+  courses.forEach(function (course) {
+    const totals = goalsTotals(course.goals || []);
+
+    if (!totals.target) return;
+
+    target += totals.target;
+    done += totals.done;
+
+    courseRows.push({
+      name: course.name,
+      done: totals.done,
+      target: totals.target,
+      percent: clamp(
+        Math.round((totals.done / totals.target) * 100),
+        0,
+        100
+      )
+    });
+  });
+
+  const remaining = Math.max(0, target - done);
+  const percent = target
+    ? clamp(Math.round((done / target) * 100), 0, 100)
+    : 0;
+
+  return '<section class="today-question-progress">' +
+    '<div class="today-question-progress__head">' +
+      '<div>' +
+         '<h3>Sorularda İlerleyiş</h3>' +
+         '<p>Bugünkü derslerdeki soru hedeflerinin toplam ilerlemesi.</p>' +
+      '</div>' +
+      '<div class="today-question-progress__actions">' +
+          '<span class="today-question-progress__percent">%' + percent + '</span>' +
+          '<button type="button" class="btn btn--soft btn--sm" data-action="export-today-progress-pdf">' +
+      ICONS.download + 'PDF İndir' +
+    '</button>' +
+  '</div>' +
+    '</div>' +
+
+    '<div class="today-question-progress__bar" role="progressbar"' +
+      ' aria-valuemin="0"' +
+      ' aria-valuemax="' + target + '"' +
+      ' aria-valuenow="' + done + '"' +
+      '>' +
+      '<span style="width:' + percent + '%"></span>' +
+    '</div>' +
+
+    '<div class="today-question-progress__stats">' +
+      '<div>' +
+        '<strong>' + done + '</strong>' +
+        '<span>Çözülen</span>' +
+      '</div>' +
+      '<div>' +
+        '<strong>' + remaining + '</strong>' +
+        '<span>Kalan</span>' +
+      '</div>' +
+      '<div>' +
+        '<strong>' + target + '</strong>' +
+        '<span>Toplam</span>' +
+      '</div>' +
+    '</div>' +
+
+    (courseRows.length
+      ? '<div class="today-question-progress__courses">' +
+          courseRows.map(function (row) {
+            return '<div class="today-question-progress__course">' +
+              '<span class="today-question-progress__course-name">' +
+                esc(row.name) +
+              '</span>' +
+              '<span class="today-question-progress__course-count">' +
+                row.done + ' / ' + row.target +
+              '</span>' +
+              '<div class="today-question-progress__course-bar">' +
+                '<span style="width:' + row.percent + '%"></span>' +
+              '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>'
+      : '<p class="today-question-progress__empty">Bugünkü derslerde henüz soru hedefi eklenmemiş.</p>') +
+
+  '</section>';
+}
+  
   function viewToday() {
     const dayId = todayDayId();
     const pending = pendingItems(dayId);
@@ -1406,6 +1496,7 @@
       '</div>' +
       (total ? '' : '<div class="empty"><h3>Bugün için ders yok.</h3>' +
         '<p>' + esc(DAY_BY_ID[dayId].label) + ' gününe ders eklemek için yukarıdaki butonu kullanabilirsin.</p></div>') +
+              renderTodayQuestionProgress(dayId) +
       /* Gün kartı ile "Yapılacaklar" paneli yan yana: geniş ekranı dengeli
          kullanır, panel tek kolonda tüm sayfayı gereğinden fazla kaplamaz. */
       '<div class="today-grid' + (pendingPanel ? '' : ' is-solo') + '">' +
@@ -1579,6 +1670,269 @@
   }
 
   /* --------------------------- Yedekleme işlemleri ----------------------- */
+  function exportTodayProgressPdf() {
+  const dayId = todayDayId();
+  const courses = state.days[dayId].courses || [];
+
+  let target = 0;
+  let done = 0;
+  const rows = [];
+
+  courses.forEach(function (course) {
+    const totals = goalsTotals(course.goals || []);
+
+    if (!totals.target) return;
+
+    target += totals.target;
+    done += totals.done;
+
+    const percent = clamp(
+      Math.round((totals.done / totals.target) * 100),
+      0,
+      100
+    );
+
+    rows.push(
+      '<div class="pdf-course">' +
+        '<div class="pdf-course__top">' +
+          '<strong>' + esc(course.name) + '</strong>' +
+          '<span>' + totals.done + ' / ' + totals.target + '</span>' +
+        '</div>' +
+        '<div class="pdf-course__bar">' +
+          '<span style="width:' + percent + '%"></span>' +
+        '</div>' +
+        '<div class="pdf-course__percent">' + percent + '% tamamlandı</div>' +
+      '</div>'
+    );
+  });
+
+  const remaining = Math.max(0, target - done);
+  const percent = target
+    ? clamp(Math.round((done / target) * 100), 0, 100)
+    : 0;
+
+  const printWindow = window.open('', '_blank');
+
+  if (!printWindow) {
+    toast('PDF penceresi açılamadı. Tarayıcının açılır pencere iznini kontrol et.');
+    return;
+  }
+
+  printWindow.document.write(
+    '<!DOCTYPE html>' +
+    '<html lang="tr">' +
+    '<head>' +
+      '<meta charset="UTF-8">' +
+      '<title>Sorularda İlerleyiş - ' + esc(formatLongDate(new Date())) + '</title>' +
+      '<style>' +
+
+        '* { box-sizing: border-box; }' +
+
+        'body {' +
+          'margin: 0;' +
+          'padding: 48px;' +
+          'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;' +
+          'color: #171717;' +
+          'background: #ffffff;' +
+        '}' +
+
+        '.pdf {' +
+          'max-width: 820px;' +
+          'margin: 0 auto;' +
+        '}' +
+
+        '.pdf-header {' +
+          'display: flex;' +
+          'justify-content: space-between;' +
+          'align-items: flex-start;' +
+          'gap: 24px;' +
+          'padding-bottom: 24px;' +
+          'border-bottom: 2px solid #e5e7eb;' +
+        '}' +
+
+        '.pdf-title {' +
+          'margin: 0;' +
+          'font-size: 28px;' +
+          'font-weight: 750;' +
+        '}' +
+
+        '.pdf-date {' +
+          'margin-top: 7px;' +
+          'font-size: 14px;' +
+          'color: #6b7280;' +
+        '}' +
+
+        '.pdf-percent {' +
+          'font-size: 30px;' +
+          'font-weight: 800;' +
+        '}' +
+
+        '.pdf-main-bar {' +
+          'height: 14px;' +
+          'margin-top: 28px;' +
+          'overflow: hidden;' +
+          'border-radius: 999px;' +
+          'background: #e5e7eb;' +
+        '}' +
+
+        '.pdf-main-bar span {' +
+          'display: block;' +
+          'height: 100%;' +
+          'border-radius: inherit;' +
+          'background: #111827;' +
+        '}' +
+
+        '.pdf-stats {' +
+          'display: grid;' +
+          'grid-template-columns: repeat(3, 1fr);' +
+          'gap: 14px;' +
+          'margin-top: 22px;' +
+        '}' +
+
+        '.pdf-stat {' +
+          'padding: 18px;' +
+          'border: 1px solid #e5e7eb;' +
+          'border-radius: 12px;' +
+          'background: #fafafa;' +
+        '}' +
+
+        '.pdf-stat strong {' +
+          'display: block;' +
+          'font-size: 25px;' +
+          'font-weight: 750;' +
+        '}' +
+
+        '.pdf-stat span {' +
+          'display: block;' +
+          'margin-top: 4px;' +
+          'font-size: 13px;' +
+          'color: #6b7280;' +
+        '}' +
+
+        '.pdf-section-title {' +
+          'margin: 34px 0 16px;' +
+          'font-size: 17px;' +
+          'font-weight: 700;' +
+        '}' +
+
+        '.pdf-course {' +
+          'padding: 16px 0;' +
+          'border-bottom: 1px solid #e5e7eb;' +
+          'break-inside: avoid;' +
+        '}' +
+
+        '.pdf-course__top {' +
+          'display: flex;' +
+          'justify-content: space-between;' +
+          'gap: 20px;' +
+          'font-size: 15px;' +
+        '}' +
+
+        '.pdf-course__top span {' +
+          'color: #4b5563;' +
+          'font-variant-numeric: tabular-nums;' +
+        '}' +
+
+        '.pdf-course__bar {' +
+          'height: 7px;' +
+          'margin-top: 9px;' +
+          'overflow: hidden;' +
+          'border-radius: 999px;' +
+          'background: #e5e7eb;' +
+        '}' +
+
+        '.pdf-course__bar span {' +
+          'display: block;' +
+          'height: 100%;' +
+          'border-radius: inherit;' +
+          'background: #111827;' +
+        '}' +
+
+        '.pdf-course__percent {' +
+          'margin-top: 6px;' +
+          'font-size: 12px;' +
+          'color: #6b7280;' +
+        '}' +
+
+        '.pdf-empty {' +
+          'padding: 24px 0;' +
+          'color: #6b7280;' +
+        '}' +
+
+        '.pdf-footer {' +
+          'margin-top: 32px;' +
+          'padding-top: 16px;' +
+          'border-top: 1px solid #e5e7eb;' +
+          'font-size: 11px;' +
+          'color: #9ca3af;' +
+        '}' +
+
+
+      '</style>' +
+    '</head>' +
+
+    '<body>' +
+      '<main class="pdf">' +
+
+        '<header class="pdf-header">' +
+          '<div>' +
+            '<h1 class="pdf-title">Sorularda İlerleyiş</h1>' +
+            '<div class="pdf-date">' +
+              esc(formatLongDate(new Date())) +
+            '</div>' +
+          '</div>' +
+
+          '<div class="pdf-percent">' +
+            '%' + percent +
+          '</div>' +
+        '</header>' +
+
+        '<div class="pdf-main-bar">' +
+          '<span style="width:' + percent + '%"></span>' +
+        '</div>' +
+
+        '<div class="pdf-stats">' +
+          '<div class="pdf-stat">' +
+            '<strong>' + done + '</strong>' +
+            '<span>Çözülen</span>' +
+          '</div>' +
+
+          '<div class="pdf-stat">' +
+            '<strong>' + remaining + '</strong>' +
+            '<span>Kalan</span>' +
+          '</div>' +
+
+          '<div class="pdf-stat">' +
+            '<strong>' + target + '</strong>' +
+            '<span>Toplam</span>' +
+          '</div>' +
+        '</div>' +
+
+        '<h2 class="pdf-section-title">Derslere Göre İlerleme</h2>' +
+
+        (rows.length
+          ? rows.join('')
+          : '<div class="pdf-empty">Bugünkü derslerde henüz soru hedefi eklenmemiş.</div>') +
+
+        '<div class="pdf-footer">' +
+          'Ders Takip Sistemi · Sorularda İlerleyiş Raporu' +
+        '</div>' +
+
+      '</main>' +
+    '</body>' +
+    '</html>'
+  );
+
+  printWindow.document.close();
+
+  printWindow.onload = function () {
+    printWindow.focus();
+    window.setTimeout(function () {
+      printWindow.print();
+    }, 250);
+  };
+}
+  
   function exportJSON() {
     const payload = { app: 'kisisel-ders-programi', version: 1, exportedAt: nowISO(), state: state };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -2481,6 +2835,10 @@
         closeConfirm(false);
         break;
 
+        case 'export-today-progress-pdf':
+          exportTodayProgressPdf();
+          return true;
+
       case 'export-json':
         exportJSON();
         break;
@@ -2984,21 +3342,5 @@
   init();
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 })();
+

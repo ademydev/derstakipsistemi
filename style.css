@@ -1383,3 +1383,176 @@ input:-webkit-autofill:focus {
   width: 100%;
   box-sizing: border-box;
 }
+
+/* ---------------------- BUGÜN / SORU İLERLEYİŞİ ---------------------- */
+
+.today-question-progress {
+  width: 100%;
+  margin-bottom: var(--s5);
+  padding: var(--s5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.today-question-progress__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  margin-bottom: var(--s4);
+}
+
+.today-question-progress__head h3 {
+  font-size: var(--t-lg);
+}
+
+.today-question-progress__head p {
+  margin-top: 4px;
+  color: var(--text-mute);
+  font-size: var(--t-sm);
+}
+
+.today-question-progress__percent {
+  flex: none;
+  font-size: var(--t-xl);
+  font-weight: 750;
+  color: var(--accent);
+}
+
+.today-question-progress__bar {
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+}
+
+.today-question-progress__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.today-question-progress__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s3);
+  margin-top: var(--s4);
+}
+
+.today-question-progress__stats > div {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.today-question-progress__stats strong {
+  display: block;
+  font-size: var(--t-xl);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.today-question-progress__stats span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-mute);
+  font-size: var(--t-sm);
+}
+
+.today-question-progress__courses {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 20px;
+  margin-top: var(--s5);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--border);
+}
+
+.today-question-progress__course {
+  min-width: 0;
+}
+
+.today-question-progress__course-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-sm);
+  font-weight: 650;
+}
+
+.today-question-progress__course-count {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-mute);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.today-question-progress__course-bar {
+  width: 100%;
+  height: 5px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+}
+
+.today-question-progress__course-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.today-question-progress__empty {
+  margin-top: var(--s4);
+  color: var(--text-mute);
+  font-size: var(--t-sm);
+}
+
+/* Küçük ekran */
+@media screen and (max-width: 720px) {
+  .today-question-progress {
+    padding: var(--s4);
+  }
+
+  .today-question-progress__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .today-question-progress__courses {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ------------------ BUGÜN / SORU İLERLEYİŞİ AKSİYONLARI ------------------ */
+
+.today-question-progress__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex: none;
+}
+
+.today-question-progress__actions .btn {
+  white-space: nowrap;
+}
+
+@media screen and (max-width: 720px) {
+  .today-question-progress__head {
+    align-items: flex-start;
+  }
+
+  .today-question-progress__actions {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+}
