@@ -583,6 +583,105 @@ body.is-dragging .slot__empty.drop-target {
 }
 .course__goal.is-complete .course__goal-label,
 .course__goal.is-complete .course__goal-count { color: var(--ok); }
+/* Başlık satırı artık yanına "kaç hedef daha var" notu alabiliyor. */
+.course__goal-head { display: flex; align-items: baseline; gap: 6px; }
+.course__goal-rest {
+  white-space: nowrap;
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--text-mute);
+}
+
+/* Ders kartının ayrıntı bölümü — paneldeki detayların AYNI verisini özetler.
+   Hiyerarşi: küçük büyük-harf başlık (+ sayaç) → kayıt satırları. Dolu olmayan
+   hiçbir alan burada başlık üretmez. Bölüm, kartın ilk satırındaki ders adıyla
+   aynı hizada başlar (21px iç boşluk, .course__goal ile aynı). */
+.course__details {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding-left: 21px;
+  display: flex; flex-direction: column; gap: 7px;
+  padding-top: 7px; margin-top: 2px;
+  border-top: 1px solid var(--border);
+}
+/* Hedef bloğu zaten bir ayırıcı çizgi çizdiyse ikinci bir çizgi binmesin. */
+.course__goal + .course__details { border-top: 0; padding-top: 8px; margin-top: 0; }
+
+.course__group { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+/* Sayaç başlığın hemen yanında durur: geniş kartta kartın sağına savrulup
+   başlığından kopmaması için. */
+.course__group-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.course__group-title {
+  display: inline-flex; align-items: center; gap: 4px; min-width: 0;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.075em;
+  text-transform: uppercase; color: var(--text-mute);
+}
+.course__group-title .icon { width: 11px; height: 11px; flex: none; }
+.course__group-count {
+  flex: none; padding: 1px 6px;
+  font-size: 9.5px; font-weight: 700; color: var(--text-mute);
+  background: var(--surface-3); border-radius: var(--r-full);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Açıklama: kapalıyken üç satırla sınırlanır, uzunsa "Daha fazla" ile tamamı.
+   max-width geniş kartta tek satıra yayılıp okunmaz olmasın diye. */
+.course__text {
+  font-size: 11.2px; line-height: 1.38; color: var(--text-soft);
+  max-width: 72ch;
+  white-space: pre-wrap; overflow-wrap: break-word;
+}
+.course__text.is-clamped {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  line-clamp: 3; overflow: hidden;
+}
+
+/* Kayıt satırı: paneldeki onay kutusu yerine sessiz bir nokta. Kart yalnızca
+   GÖRÜNÜR — düzenleme/tik işlemleri olduğu gibi panelde kalır. */
+.course__rows { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.course__row {
+  display: flex; align-items: flex-start; gap: 6px; min-width: 0;
+  font-size: 11.2px; line-height: 1.38; color: var(--text-soft);
+}
+.course__row-mark {
+  flex: none; width: 4px; height: 4px; margin-top: 6px;
+  border-radius: var(--r-full); background: var(--border-strong);
+}
+/* Tek bir kayıt (örn. uzun bir not) kartı esnetmesin: üç satırla sınırlanır.
+   Tam metin zaten detay panelinde bir tıkla erişilebilir. */
+.course__row-text {
+  min-width: 0; overflow-wrap: break-word;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  line-clamp: 3; overflow: hidden;
+}
+.course__row-count {
+  margin-left: auto; padding-left: 8px; flex: none;
+  font-size: var(--t-xs); font-weight: 650; color: var(--text-mute);
+  font-variant-numeric: tabular-nums;
+}
+/* Tamamlanan kayıt, paneldeki gibi soluk ve üstü çizili. */
+.course__row.is-done .course__row-mark { background: var(--ok); }
+.course__row.is-done .course__row-text { color: var(--text-mute); text-decoration: line-through; }
+
+/* Kalan kayıt sayısı ("+2 kayıt"): başlığın altında sessiz bir rozet. */
+.course__rest {
+  align-self: flex-start; padding: 1px 6px; border-radius: var(--r-full);
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--text-mute); background: var(--surface-3);
+}
+
+/* "Daha fazla / Daha az": kartın kendi görünüm düğmesi. Kartın tıklanabilir
+   işlevi korunur — bu düğmeye tıklamak paneli değil, kartın içini açar. */
+.course__more {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border: 1px solid var(--border); border-radius: var(--r-full);
+  background: transparent; color: var(--accent);
+  font-size: var(--t-xs); font-weight: 650; letter-spacing: 0.01em;
+  white-space: nowrap; /* dar sütunda "Daha fazla göster" ikiye bölünmesin */
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.course__more:hover { background: var(--accent-soft); border-color: var(--accent-border); }
+.course__more .icon { width: 12px; height: 12px; transition: transform 0.18s ease; }
+.course.is-expanded .course__more .icon { transform: rotate(180deg); }
 
 /* Rozetler — bilgi taşır, bağırmaz */
 .chip {
@@ -1042,6 +1141,8 @@ input:-webkit-autofill:focus {
    ve minik kontroller parmakla rahat dokunulabilir boyutta kalsın. */
 @media (hover: none) {
   .course__handle, .course__tools, .item__tools { opacity: 1; }
+  /* "Daha fazla" kartın içi kontrolü: parmakla rahat dokunulabilir boyutta. */
+  .course__more { min-height: 32px; padding: 6px 13px; }
   .section__add { width: 36px; height: 36px; }
   .btn-add--mini { min-height: 38px; padding: 6px 12px; font-size: var(--t-md); }
   .slot__add { width: 30px; height: 30px; }

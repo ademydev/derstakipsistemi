@@ -43,6 +43,12 @@
     notes: { title: 'Notlar', add: 'Not Ekle', placeholder: 'Notunu yaz…' },
     sources: { title: 'Kaynaklar', add: 'Kaynak Ekle', placeholder: 'Örn. 3D Yayınları' }
   };
+  /* Listenin tekil adı: form etiketleri, silme bildirimleri ve ders kartındaki
+     bilgi başlıkları hep buradan okur. */
+  const SINGULAR = {
+    topics: 'Konu', goals: 'Soru hedefi', homeworks: 'Ödev',
+    repeats: 'Tekrar', notes: 'Not', sources: 'Kaynak'
+  };
 
   /* -------------------------------- İkonlar ------------------------------ */
   function icon(inner, weight) {
@@ -69,6 +75,10 @@
     moon: icon('<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z"/>'),
     school: icon('<path d="M3 10l9-4 9 4-9 4-9-4Z"/><path d="M7 12.4V17c0 1.1 2.2 2 5 2s5-.9 5-2v-4.6"/>'),
     book: icon('<path d="M6 4h11a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2V4Z"/><path d="M6 4v16"/><path d="M10 8h5"/>'),
+    task: icon('<path d="M4 7l1.8 1.8L8.5 6"/><path d="M4 17l1.8 1.8L8.5 16"/><path d="M12 7h8M12 17h8"/>'),
+    repeat: icon('<path d="M4 12a8 8 0 0 1 8-8h8"/><path d="M20 4l-3.5-3.5M20 4l-3.5 3.5"/><path d="M20 12a8 8 0 0 1-8 8H4"/><path d="M4 20l3.5 3.5M4 20l3.5-3.5"/>'),
+    note: icon('<path d="M4 5h16v11H8l-4 4V5Z"/><path d="M8 9h8M8 12.5h5"/>'),
+    source: icon('<path d="M10.5 13.5a4 4 0 0 0 5.7 0l2.6-2.6a4 4 0 0 0-5.7-5.7l-1.5 1.5"/><path d="M13.5 10.5a4 4 0 0 0-5.7 0l-2.6 2.6a4 4 0 0 0 5.7 5.7l1.5-1.5"/>'),
     sliders: icon('<path d="M4 7h9M17 7h3M4 17h5M13 17h7"/><circle cx="15" cy="7" r="2"/><circle cx="11" cy="17" r="2"/>'),
     trend: icon('<path d="M4 16l5-5 3 3 7-7"/><path d="M15 7h4v4"/>')
   };
@@ -473,6 +483,7 @@
     forms: {},        // açık satır içi formlar
     modal: null,      // { type, ... }
     drag: null,       // sürüklenen ders bilgisi
+    expanded: {},     // kartta açılmış "daha fazla" blokları (ders id → true)
     focus: null       // render sonrası odaklanacak eleman
   };
   let pendingConfirm = null;
@@ -752,6 +763,9 @@
     const index = list.indexOf(found.course);
     list.splice(index, 1);
     if (ui.drawer === courseId) ui.drawer = null;
+    /* Silinen dersin kart açık/kapalı görünümü de temizlenir (Geri al
+       durumunda kart kapalı çizilir; veri kaydı etkilenmez). */
+    delete ui.expanded[courseId];
     ui.forms = {};
     save();
     return { dayId: found.dayId, index: index, course: found.course };
@@ -1030,18 +1044,139 @@
     catch (e) { return date.getDate() + '.' + (date.getMonth() + 1); }
   }
 
+  /* Ders kartındaki liste türlerinin ikonu. Anahtarlar LISTS ile birebir aynıdır;
+     ileride LISTS'e eklenen bir tür bu eşlemede yoksa jenerik ikonla listeye
+     düşer ve kartta kendiliğinden görünür. Başlık metinleri SINGULAR/LISTS'ten
+     okunur — etiketler iki ayrı yerde tanımlanmaz. */
+  const CARD_ICONS = {
+    topics: ICONS.book,
+    homeworks: ICONS.task,
+    repeats: ICONS.repeat,
+    notes: ICONS.note,
+    sources: ICONS.source
+  };
+  /* Kapalı durumda her başlık altında kaç kayıt görünsün; fazlası "Daha fazla"
+     ile açılır. Uzun metinler de bu satır sayısından sonra kırpılır. */
+  const CARD_PREVIEW_ROWS = 2;
+  const CARD_TEXT_LIMIT = 96;
+
+  /* Kartın gösterdiği bilgi blokları. Kaynak, sağdaki detay panelinin kullandığı
+     verinin ta kendisidir: course.description + course[LISTS anahtarı]. Yeni veri
+     alanı ya da ikinci bir gösterim modeli yoktur. DOLU OLMAYAN HİÇBİR BLOK
+     ÜRETİLMEZ — boş alanın başlığı kartta hiç görünmez. */
+  function courseCardGroups(course) {
+    const groups = [];
+
+    const description = String(course.description || '').trim();
+    if (description) {
+      groups.push({ kind: 'text', label: 'Açıklama', icon: ICONS.info, text: description });
+    }
+
+    Object.keys(LISTS).forEach(function (key) {
+      /* Soru hedefleri kendi ilerleme bloğunda çizilir (renderCourseGoal);
+         aynı kayıt burada tekrarlanmaz. */
+      if (key === 'goals') return;
+      const items = (course[key] || []).filter(function (item) {
+        return String(item.text || '').trim() !== '';
+      });
+      if (!items.length) return;
+      groups.push({
+        kind: 'list',
+        label: SINGULAR[key] || LISTS[key].title,
+        icon: CARD_ICONS[key] || ICONS.info,
+        checkable: !!LISTS[key].checkable,
+        items: items
+      });
+    });
+
+    return groups;
+  }
+
+  /* Tek bilgi bloğu: küçük büyük-harf başlık, sağda sayaç, altında kayıtlar.
+     Tamamlanan kayıtlar paneldeki gibi soluk ve üstü çizili görünür. */
+  function renderCourseGroup(group, expanded) {
+    /* Açıklama tek metindir: kayıt listesi ve sayacı yoktur. */
+    if (group.kind === 'text') {
+      return '<div class="course__group">' +
+        '<div class="course__group-head">' +
+          '<span class="course__group-title">' + group.icon + esc(group.label) + '</span>' +
+        '</div>' +
+        '<p class="course__text' + (expanded ? '' : ' is-clamped') + '">' + esc(group.text) + '</p>' +
+      '</div>';
+    }
+
+    const count = group.checkable
+      ? group.items.filter(function (item) { return item.done; }).length + '/' + group.items.length
+      : group.items.length;
+
+    const rows = expanded ? group.items : group.items.slice(0, CARD_PREVIEW_ROWS);
+    const rest = group.items.length - rows.length;
+
+    const list = rows.map(function (item) {
+      const done = group.checkable && item.done;
+      return '<li class="course__row' + (done ? ' is-done' : '') + '">' +
+        '<span class="course__row-mark" aria-hidden="true"></span>' +
+        '<span class="course__row-text">' + esc(item.text) + '</span>' +
+      '</li>';
+    }).join('');
+
+    return '<div class="course__group">' +
+      '<div class="course__group-head">' +
+        '<span class="course__group-title">' + group.icon + esc(group.label) + '</span>' +
+        '<span class="course__group-count">' + count + '</span>' +
+      '</div>' +
+      '<ul class="course__rows">' + list + '</ul>' +
+      (rest ? '<span class="course__rest">+' + rest + ' kayıt</span>' : '') +
+    '</div>';
+  }
+
+  /* Kartın ayrıntı bölümü: açıklama + dolu olan her liste türü. Ne kadar
+     içerik varsa "Daha fazla" düğmesi o kadar anlamlıdır; hiçbir şey
+     taşıyorsa bölümün tamamı hiç çizilmez. */
+  function renderCourseDetails(course) {
+    const groups = courseCardGroups(course);
+    if (!groups.length) return '';
+
+    const expanded = !!ui.expanded[course.id];
+    const canToggle = groups.some(function (group) {
+      return group.kind === 'text'
+        ? group.text.length > CARD_TEXT_LIMIT
+        : group.items.length > CARD_PREVIEW_ROWS;
+    });
+
+    return '<div class="course__details">' +
+      groups.map(function (group) { return renderCourseGroup(group, expanded); }).join('') +
+      (canToggle
+        ? '<button type="button" class="course__more" data-action="toggle-card-more" data-id="' +
+          esc(course.id) + '" aria-expanded="' + (expanded ? 'true' : 'false') + '">' +
+          ICONS.down + '<span>' + (expanded ? 'Daha az göster' : 'Daha fazla göster') + '</span>' +
+        '</button>'
+        : '') +
+    '</div>';
+  }
+
   /* Kartın altına yerleşen soru hedefi bloğu: küçük etiket, hedef adı,
      ince ilerleme çubuğu ve "tamamlanan / hedef" sayısı.
-     Hedef yoksa boş blok üretilmez (kart boyu değişmez). */
-  function renderCourseGoal(course) {
+     Hedef yoksa boş blok üretilmez (kart boyu değişmez).
+     Birden çok hedef varsa kapalıyken yalnızca "kaç hedef daha var" söylenir;
+     "Daha fazla" açıldığında diğer hedefler de ilerlemeleriyle listelenir. */
+  function renderCourseGoal(course, expanded) {
     const goal = pickCardGoal(course);
     if (!goal) return '';
     const progress = goalProgress(goal);
     const name = String(goal.text || '').trim();
     const label = name ? name + ' · ' + progress.target + ' Soru' : progress.target + ' Soru';
+    const extras = expanded
+      ? course.goals.filter(function (g) { return g !== goal; })
+      : [];
 
     return '<div class="course__goal' + (progress.complete ? ' is-complete' : '') + '">' +
-      '<span class="course__goal-label">Soru Hedefi</span>' +
+      '<div class="course__goal-head">' +
+        '<span class="course__goal-label">Soru Hedefi</span>' +
+        (course.goals.length > 1 && !expanded
+          ? '<span class="course__goal-rest">+' + (course.goals.length - 1) + ' hedef</span>'
+          : '') +
+      '</div>' +
       '<span class="course__goal-name" title="' + esc(label) + '">' + esc(label) + '</span>' +
       '<span class="course__goal-row">' +
         '<span class="course__bar" aria-hidden="true">' +
@@ -1049,17 +1184,33 @@
         '</span>' +
         '<span class="course__goal-count">' + progress.done + ' / ' + progress.target + '</span>' +
       '</span>' +
+      (extras.length
+        ? '<ul class="course__rows">' + extras.map(function (g) {
+            const p = goalProgress(g);
+            const rowLabel = goalLabel(g);
+            return '<li class="course__row' + (p.complete ? ' is-done' : '') + '">' +
+              '<span class="course__row-mark" aria-hidden="true"></span>' +
+              '<span class="course__row-text">' + esc(rowLabel) + '</span>' +
+              '<span class="course__row-count">' + p.done + '/' + p.target + '</span>' +
+            '</li>';
+          }).join('') + '</ul>'
+        : '') +
     '</div>';
   }
 
-  /* Ders kartı — ders adı, saat, öğretmen ve varsa soru hedefi ilerlemesi. */
+  /* Ders kartı — ad, saat, öğretmen (üstte); soru hedefi ilerlemesi ve
+     açıklama/konu/ödev/tekrar/not/kaynak kayıtları (altta). Alt bölüm de
+     panelin kullandığı aynı veriden beslenir; kart yine tıklanabilirdir ve
+     detay paneli aynı şekilde açılır. */
   function renderCourseCard(course, dayId) {
     const meta = [];
     if (course.time) meta.push('<span class="course__time">' + ICONS.clock + esc(course.time) + '</span>');
     if (course.teacher) meta.push('<span class="course__teacher">' + ICONS.user + esc(course.teacher) + '</span>');
-    const goal = renderCourseGoal(course);
+    const expanded = !!ui.expanded[course.id];
+    const goal = renderCourseGoal(course, expanded);
+    const details = renderCourseDetails(course);
 
-    return '<div class="course" draggable="true" role="button" tabindex="0"' +
+    return '<div class="course' + (expanded ? ' is-expanded' : '') + '" draggable="true" role="button" tabindex="0"' +
         ' data-action="open-course" data-id="' + esc(course.id) +
         '" data-day="' + esc(dayId) + '" data-slot="' + esc(course.slot) + '"' +
         ' aria-label="' + esc(course.name) + ' dersinin detaylarını aç">' +
@@ -1075,6 +1226,7 @@
           '" data-delta="1" title="Aşağı taşı" aria-label="Aşağı taşı">' + ICONS.down + '</button>' +
       '</div>' +
       goal +
+      details +
     '</div>';
   }
 
@@ -1199,7 +1351,8 @@
           return renderDay(day.id, { highlightToday: day.id === todayId });
         }).join('') +
       '</div>' +
-      '<p class="hint hint--block">Ders kartına tıklayarak detayları (konu, soru hedefi, ödev, not) açabilirsin. ' +
+      '<p class="hint hint--block">Her ders kartında adı, saati, öğretmeni ve eklediğin bilgiler (açıklama, konu, ödev, tekrar, not, kaynak) ' +
+      'kısaca görünür; "Daha fazla" ile hepsini açabilirsin. Kartın kendisine tıklayınca düzenlemek için detay paneli açılır. ' +
       'Kartları sürükleyerek veya kart üzerindeki oklarla sırasını değiştirebilirsin.</p>' +
     '</section>';
   }
@@ -1569,11 +1722,6 @@
     if (!chips.length) return '';
     return '<section class="section"><div class="quickadd">' + chips.join('') + '</div></section>';
   }
-
-  const SINGULAR = {
-    topics: 'Konu', goals: 'Soru hedefi', homeworks: 'Ödev',
-    repeats: 'Tekrar', notes: 'Not', sources: 'Kaynak'
-  };
 
   function renderForm(kind, course, item, key) {
     const config = LISTS[kind];
@@ -2115,6 +2263,24 @@
       case 'shift-course':
         if (shiftCourse(trigger.dataset.id, intOr(trigger.dataset.delta, 0))) render();
         return true;
+
+      /* Kartın "Daha fazla" düğmesi: yalnızca kartın kendi görünümünü açar,
+         detay panelini açmaz (tıklama bu düğmede yakalandığı için kartın
+         open-course işlemi tetiklenmez). Durum yalnızca arayüzde tutulur;
+         veriye yazılmaz ve kaydetme mantığına dokunmaz. */
+      case 'toggle-card-more': {
+        const id = trigger.dataset.id;
+        const scrollY = window.scrollY;
+        const willExpand = !ui.expanded[id];
+        if (willExpand) ui.expanded[id] = true;
+        else delete ui.expanded[id];
+        /* Odak düğmede kalsın (klavye kullanımı) — render() sonrasında uygulanır. */
+        ui.focus = '[data-action="toggle-card-more"][data-id="' + id + '"]';
+        render();
+        /* Kart büyüdüğü için sayfa kaymasın: konum aynen geri yüklenir. */
+        if (willExpand) window.scrollTo(0, scrollY);
+        return true;
+      }
 
       case 'open-form': {
         const key = trigger.dataset.form;
