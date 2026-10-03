@@ -1029,14 +1029,15 @@ input:-webkit-autofill:focus {
 
 /* Haftalık ızgara: ekran genişliğine göre 7 → 4 → 3 → 2 → 1 sütun.
    Sidebar açıldığında içerik alanı daraldığı için eşikler yukarı alınır.
-   :not(.week--five) eklenerek Okul Programı'nın 5 sütunlu düzeni bu merdivenin
-   dışında tutulur. */
-@media (max-width: 1420px) { .week:not(.week--single):not(.week--two):not(.week--five) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (max-width: 1040px) { .week:not(.week--single):not(.week--two):not(.week--five) { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 820px)  { .week:not(.week--single):not(.week--two):not(.week--five) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+   Aşağıdaki :not() zinciri, bu merdiveni yalnızca kendi kuralı olan ekranlara
+   uygular; kendi düzeni tanımlanan ekranlar (Okul 5 sütun, Haftalık/Çalışma
+   tek sütun) buradan çıkarılır. */
+@media (max-width: 1420px) { .week:not(.week--single):not(.week--two):not(.week--five):not(.mt):not(:has(+ .hint--block)) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 1040px) { .week:not(.week--single):not(.week--two):not(.week--five):not(.mt):not(:has(+ .hint--block)) { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 820px)  { .week:not(.week--single):not(.week--two):not(.week--five):not(.mt):not(:has(+ .hint--block)) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) {
   .week.week--two { grid-template-columns: minmax(0, 1fr); }
-  .week:not(.week--single):not(.week--two):not(.week--five) { grid-template-columns: minmax(0, 1fr); }
+  .week:not(.week--single):not(.week--two):not(.week--five):not(.mt):not(:has(+ .hint--block)) { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Okul Programı (5 gün): 5 → 3 → 2 → 1 sütun. */
@@ -1044,30 +1045,47 @@ input:-webkit-autofill:focus {
 @media (max-width: 820px)  { .week.week--five { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px)  { .week.week--five { grid-template-columns: minmax(0, 1fr); } }
 
-/* Haftalık Program ve Çalışma Programı ekranları: 7 gün tek satırda çok sıkışıyor,
-   kartlar düzgün okunmuyordu. Bu iki ekran 3 sütuna geçirildi:
-     1. satır  Pzt – Sal – Çar
-     2. satır  Per – Cum – Cmt
-     3. satır  Paz (tek başına, ilk sütunda)
-   Yalnızca yerleşim değişir — gün sırası DOM sırasıdır (Pzt → Paz) ve ızgara bu
-   sırayı korur, dolayısıyla Pazar kendiliğinden 3. satırın ilk sütununda tek başına
-   durur; kalan iki hücre boş kalır. Kart içerikleri, ekleme/silme/düzenleme ve
-   sürükleme-taşıma mantığına dokunulmaz.
+/* Haftalık Program ve Çalışma Programı ekranları — yeni düzen:
+     • Günler ALT ALTA: ızgara tek sütun, her gün kartı tam genişlik kaplar.
+       Gün sırası DOM sırasıdır (Pzt → Paz), ızgara bu sırayı korur.
+     • Her günün İÇİNDE Sabah / Okul / Akşam bölümleri YAN YANA: gün gövdesi
+       yan yana yerleşen ızgara sütunlarına döner.
+   Kart içerikleri, ekleme/silme/düzenleme ve sürükleme-taşıma mantığına dokunulmaz.
 
    Kapsam — sadece bu iki ekran, iki ayrı işaretle:
      • Haftalık Program: .week'in hemen ardından .hint--block ipucu gelir.
      • Çalışma Programı: ızgara "mt" sınıfıyla gelir (başlıktan sonra boşluk);
        bu birleşim JS'de yalnızca bir kez geçiyor.
-   "Bugün" (week--single) ve "Okul Programım" bu seçicilere girmez; 7 sütunlu
+   "Bugün" (week--single) ve "Okul Programım" (week--five) bu seçicilere girmez;
    düzenleri olduğu gibi kalır. `:has()` temel bir özelliktir (dosyada kullanılan
    color-mix'ten daha eski), tarayıcı desteği güvenlidir.
 
    Sıralama: bu kurallar yukarıdaki .week media kurallarından SONRA gelir ve özgüllükleri
-   eşittir (0,3,0) — bu yüzden bu iki ekranın düzeni onları ezer.
-   @media screen ile sınırlanır: yazdırmada mevcut kompakt 7 sütunlu düzen korunur. */
-@media screen { .page .week:has(+ .hint--block), .page .week.mt { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media screen and (max-width: 820px) { .page .week:has(+ .hint--block), .page .week.mt { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media screen and (max-width: 640px) { .page .week:has(+ .hint--block), .page .week.mt { grid-template-columns: minmax(0, 1fr); } }
+   daha yüksektir, dolayısıyla o merdiveni ezer.
+   @media screen ile sınırlanır: yazdırmada mevcut kompakt düzen korunur. */
+@media screen {
+  /* Günler alt alta: tek sütun. */
+  .page .week:has(+ .hint--block),
+  .page .week.mt { grid-template-columns: minmax(0, 1fr); }
+
+  /* Günün içindeki bölümler yan yana. auto-fit, bölüm sayısına göre esner:
+     3 bölüm varsa 3 eşit sütun, 2 bölüm varsa (Çalışma Programı) 2 sütun.
+     :not(.day__body--empty) önemli: boş gün gövdesi bölüm değil, metin + hızlı
+     ekleme butonları + gizli bırakma alanları içerir; onlar alt alta kalmalı. */
+  .page .week:has(+ .hint--block) .day__body:not(.day__body--empty),
+  .page .week.mt .day__body:not(.day__body--empty) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    align-items: start;
+  }
+}
+
+/* Dar ekranda bölümler yan yana sığmaz: alt alta (tek sütun) iner.
+   Gün kartları zaten tam genişlik olduğu için ekranı yine doldurur. */
+@media screen and (max-width: 720px) {
+  .page .week:has(+ .hint--block) .day__body:not(.day__body--empty),
+  .page .week.mt .day__body:not(.day__body--empty) { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* Bugün sayfası: iki kolon dar ekranda alt alta iner. */
 @media (max-width: 1120px) {
@@ -1191,6 +1209,8 @@ input:-webkit-autofill:focus {
   .week { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
   /* Okul Programı yazdırmada da 5 sütun kalsın (Cmt/Paz yok). */
   .week.week--five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  /* Haftalık / Çalışma Programı yazdırmada da tek sütun (günler alt alta). */
+  .week:has(+ .hint--block), .week.mt { grid-template-columns: minmax(0, 1fr); }
   .day { box-shadow: none; border-color: #ccc; break-inside: avoid; }
   .course { background: #fff; break-inside: avoid; }
 }
