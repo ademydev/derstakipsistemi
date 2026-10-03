@@ -405,7 +405,7 @@
   function emptyState() {
     const days = {};
     DAYS.forEach(function (d) { days[d.id] = { id: d.id, courses: [] }; });
-    return { version: 1, settings: { theme: 'system' }, updatedAt: nowISO(), days: days };
+    return { version: 1, settings: { theme: 'system', sidebar: 'expanded' }, updatedAt: nowISO(), days: days };
   }
 
   function normalizeItem(item, kind) {
@@ -450,6 +450,9 @@
     if (!isPlainObject(raw)) return out;
     const theme = isPlainObject(raw.settings) ? raw.settings.theme : null;
     if (THEMES.indexOf(theme) >= 0) out.settings.theme = theme;
+    /* Sidebar tercihi cihaza özeldir ve buluta gönderilmez; yalnızca yerelde tutulur. */
+    const sidebar = isPlainObject(raw.settings) ? raw.settings.sidebar : null;
+    if (sidebar === 'expanded' || sidebar === 'collapsed') out.settings.sidebar = sidebar;
     DAYS.forEach(function (day) {
       const src = isPlainObject(raw.days) ? raw.days[day.id] : null;
       const courses = src && Array.isArray(src.courses) ? src.courses : [];
@@ -489,6 +492,31 @@
     document.documentElement.setAttribute('data-theme', resolved);
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0d1220' : '#4f46e5');
+  }
+
+  /* Sidebar (masaüstü rayı) aç/kapa durumu. Tüm görsel davranış CSS'te;
+     burada yalnızca <html> veri niteliği ile düğmenin erişilebilir
+     etiketleri güncellenir. Tercih, temanın kullandığı settings kovasında
+     saklanır ve aynı save() ile yazılır — ayrı bir depolama yoktur. */
+  function applySidebar() {
+    const collapsed = state.settings.sidebar === 'collapsed';
+    document.documentElement.setAttribute('data-rail', collapsed ? 'collapsed' : 'expanded');
+    const toggle = document.querySelector('.sidebar-toggle');
+    if (!toggle) return;
+    const label = collapsed ? 'Sidebar’ı genişlet' : 'Sidebar’ı daralt';
+    toggle.setAttribute('aria-label', label);
+    toggle.setAttribute('title', label);
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    /* Dar rayda metinler görünmez; adı ipucu olarak da gösterelim. */
+    const nav = document.getElementById('nav');
+    if (!nav) return;
+    Array.prototype.forEach.call(nav.querySelectorAll('.nav__item'), function (item) {
+      const text = item.querySelector('.nav__label');
+      if (!text) return;
+      const name = text.textContent.trim();
+      if (collapsed) item.setAttribute('title', name);
+      else item.removeAttribute('title');
+    });
   }
 
   /* ------------------------------- Kayıt --------------------------------- */
@@ -2232,6 +2260,14 @@
         render();
         break;
 
+      case 'toggle-sidebar':
+        /* Masaüstü rayını açar/kapatır. Tercih state.settings içinde yaşar ve
+           mevcut save() ile yazılır; bulut senkronuna girmez. */
+        state.settings.sidebar = state.settings.sidebar === 'collapsed' ? 'expanded' : 'collapsed';
+        applySidebar();
+        save();
+        break;
+
       case 'sign-out':
         signOut();
         break;
@@ -2603,6 +2639,7 @@
         } else {
           state = normalize(remoteState);
           applyTheme();
+          applySidebar();
           await Store.write(state);
           if (localHas && !hadCache) toast('Buluttan güncel program yüklendi.');
           setSyncStatus('idle');
@@ -2640,6 +2677,7 @@
     if (remoteTime > localTime) {
       state = normalize(remoteState);
       applyTheme();
+      applySidebar();
       await Store.write(state);
       render();
       setSyncStatus('idle');
@@ -2707,6 +2745,7 @@
     window.setInterval(checkDayRollover, 30000);
 
     applyTheme();
+    applySidebar();
     /* Önce boş iskelet (yedi gün) hemen çizilir; ardından cihazdaki veriler yüklenir.
        Böylece depolama erişimi yavaş olsa bile arayüz beklemede kalmaz. */
     render();
@@ -2717,6 +2756,7 @@
         hadCache = !!raw;
         state = normalize(raw);
         applyTheme();
+        applySidebar();
         render();
       }
       /* 2) Oturum kontrolü; girişliyse buluttan yükleme. */

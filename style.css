@@ -241,6 +241,14 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .nav__item.is-active .icon { opacity: 1; }
 
+/* Navigasyon metni: daraltılmış durumda sönümlenerek kapanır.
+   Erişilebilirlik: metin DOM'da kalır, ekran okuyucular isimleri okumaya
+   devam eder. */
+.nav__label {
+  min-width: 0; overflow: hidden; white-space: nowrap;
+  transition: opacity 140ms ease, max-width 180ms ease, margin-left 180ms ease;
+}
+
 /* Simge düğmeleri (tema anahtarı) */
 .icon-btn {
   flex: none; display: grid; place-items: center; width: 38px; height: 38px;
@@ -254,6 +262,11 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .theme-toggle { margin-left: auto; }
 [data-theme="light"] .icon--moon { display: none; }
 [data-theme="dark"] .icon--sun { display: none; }
+
+/* Menü düğmesi — mevcut simge düğmesi diliyle aynı; yalnızca masaüstü
+   rayında görünür, yatay üst barda tamamen gizlidir. (.icon-btn'den SONRA
+   yazılır: aynı özgüllükte display:grid bu kuralı ezmesin.) */
+.sidebar-toggle { display: none; }
 
 /* -------------------------- 4) SAYFA YAPISI ----------------------------- */
 /* Geniş ama kontrollü: içerik sıkıştırılmaz, kenarlarda makul pay bırakılır. */
@@ -965,10 +978,31 @@ input:-webkit-autofill:focus {
   }
   .theme-toggle { margin-left: 0; margin-top: auto; }
 
+  /* Menü düğmesi rayın en üstünde kendi satırında durur; marka ve navigasyon
+     altında sıralanır. Mobilde tamamen gizlidir (üstteki temel kural). */
+  .sidebar-toggle { display: grid; align-self: flex-start; }
+
   .main {
     margin-left: var(--rail); margin-right: auto;
     padding: var(--s6) var(--s6) 80px;
+    transition: margin-left 180ms ease;
   }
+  .topbar, .topbar__inner, .nav__item { transition: width 180ms ease, padding 180ms ease; }
+
+  /* ---------------------------- DARALTILMIŞ RAY -------------------------- */
+  /* Genişlik tek bir değişkenden gelir: --rail. Sidebar daralınca .main'in
+     sol boşluğu da aynı anda çözülür, içerik boş bir kolon bırakmaz. */
+  [data-rail="collapsed"] { --rail: 76px; }
+  [data-rail="collapsed"] .topbar__inner { padding: 18px 10px; align-items: center; gap: var(--s5); }
+  [data-rail="collapsed"] .sidebar-toggle { align-self: center; }
+  [data-rail="collapsed"] .nav__item { justify-content: center; padding-left: 0; padding-right: 0; }
+  [data-rail="collapsed"] .nav__label { opacity: 0; max-width: 0; margin-left: -7px; }
+  /* Marka satırı tamamen gizlenir: dar rayda yalnızca ikonlar kalır, üstte
+     tek kontrol (menü düğmesi) görünür. */
+  [data-rail="collapsed"] .brand { display: none; }
+  [data-rail="collapsed"] .theme-toggle { margin-left: auto; margin-right: auto; }
+  /* Aktif göstergenin kenardan uzaklığı dar rayda korunur */
+  [data-rail="collapsed"] .nav__item.is-active::before { left: -10px; }
 }
 
 /* Tablet / mobil: yatay üst bar korunur, ikincil metinler gizlenir. */
