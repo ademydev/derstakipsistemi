@@ -258,14 +258,22 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 .icon-btn:hover { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
-
-.theme-toggle { margin-left: auto; }
 [data-theme="light"] .icon--moon { display: none; }
 [data-theme="dark"] .icon--sun { display: none; }
 
-/* Menü düğmesi — mevcut simge düğmesi diliyle aynı; yalnızca masaüstü
-   rayında görünür, yatay üst barda tamamen gizlidir. (.icon-btn'den SONRA
-   yazılır: aynı özgüllükte display:grid bu kuralı ezmesin.) */
+/* Alt küme: Ayarlar + tema + kenar çubuğu düğmeleri tek yerde.
+   Yatay üst barda nav'ın altında, sola yaslı bir satır olarak durur; dikey
+   rayda (≥1200px) sol alta yığılan kümeye dönüşür (bkz. 18) responsive. */
+.topbar__foot {
+  display: flex; align-items: center; gap: 10px;
+  order: 4; width: 100%; flex: none;
+}
+.topbar__foot .nav__item--foot { flex: 1 1 auto; min-width: 0; }
+.topbar__foot .icon-btn { flex: none; }
+
+/* Kenar çubuğu düğmesi yalnızca masaüstü rayında anlamlıdır; yatay üst barda
+   gizlidir. .icon-btn'den SONRA yazılır ki aynı özgüllükteki display:grid
+   (masaüstü kuralı) bu gizlemeyi ezmesin. */
 .sidebar-toggle { display: none; }
 
 /* -------------------------- 4) SAYFA YAPISI ----------------------------- */
@@ -1252,4 +1260,89 @@ input:-webkit-autofill:focus {
     height: 22px;
     border-radius: 999px;
   }
+}
+
+/* =========================================================
+   DARALTILMIŞ SIDEBAR — TAŞMA VE ALT KONTROLLER
+   ========================================================= */
+
+@media (min-width: 1200px) {
+
+  /* Dar sidebar'ın gerçek genişliği */
+  [data-rail="collapsed"] .topbar {
+    width: 76px;
+  }
+
+  /* İçerik sidebar'ın dışına taşmasın */
+  [data-rail="collapsed"] .topbar__inner {
+    width: 76px;
+    min-width: 76px;
+    padding: 18px 10px;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  /* Navigasyon ikonları ortalansın */
+  [data-rail="collapsed"] .nav {
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+  }
+
+  [data-rail="collapsed"] .nav__item {
+    flex: none;
+  }
+
+  /* Ayarlar + tema + sidebar artık yatay değil,
+     dikey olarak alt alta dizilsin */
+  [data-rail="collapsed"] .topbar__foot {
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: auto;
+  }
+
+  /* Ayarlar butonunun footer içinde genişleyip taşmasını engelle */
+  [data-rail="collapsed"] .topbar__foot .nav__item--foot {
+    flex: none;
+    width: 46px;
+    height: 46px;
+    min-width: 46px;
+    min-height: 46px;
+    padding: 0;
+    margin: 0;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+  }
+
+  /* Tema ve sidebar butonlarını da aynı ölçüye getir */
+  [data-rail="collapsed"] .topbar__foot .icon-btn {
+    width: 46px;
+    height: 46px;
+    min-width: 46px;
+    min-height: 46px;
+    padding: 0;
+    border-radius: 50%;
+    margin: 0;
+  }
+
+  /* Footer'daki metinler tamamen alan kaplamasın */
+  [data-rail="collapsed"] .topbar__foot .nav__label {
+    display: none;
+  }
+
+  /* Tüm ikonlar aynı hizaya gelsin */
+  [data-rail="collapsed"] .topbar__foot .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Sidebar toggle ortada kalsın */
+  [data-rail="collapsed"] .sidebar-toggle {
+    align-self: center;
+  }
+
 }

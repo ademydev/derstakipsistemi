@@ -481,7 +481,7 @@
   const ui = {
     authMode: 'login',  // login | signup — giriş/kayıt formu
     authError: null,    // giriş formunda gösterilecek hata
-    view: 'week',     // week | today | school | study | settings
+    view: 'today',     // week | today | school | study | settings
     drawer: null,     // açık dersin kimliği
     forms: {},        // açık satır içi formlar
     modal: null,      // { type, ... }

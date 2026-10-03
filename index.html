@@ -27,11 +27,6 @@
 
   <header class="topbar">
     <div class="topbar__inner">
-      <button type="button" class="icon-btn sidebar-toggle" data-action="toggle-sidebar"
-              aria-controls="nav" aria-expanded="true" aria-label="Sidebar'ı daralt" title="Sidebar'ı daralt">
-        <svg viewBox="0 0 24 24" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
-      </button>
-
       <div class="brand">
         <span class="brand__mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" class="icon"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -51,14 +46,26 @@
           <svg viewBox="0 0 24 24" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-4 9 4-9 4-9-4Z"/><path d="M7 12.4V17c0 1.1 2.2 2 5 2s5-.9 5-2v-4.6"/></svg><span class="nav__label">Okul Programım</span></button>
         <button type="button" class="nav__item" data-action="set-view" data-view="study">
           <svg viewBox="0 0 24 24" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h11a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2V4Z"/><path d="M6 4v16"/><path d="M10 8h5"/></svg><span class="nav__label">Çalışma Programım</span></button>
-        <button type="button" class="nav__item" data-action="set-view" data-view="settings">
-          <svg viewBox="0 0 24 24" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 7h3M4 17h5M13 17h7"/><circle cx="15" cy="7" r="2"/><circle cx="11" cy="17" r="2"/></svg><span class="nav__label">Ayarlar</span></button>
       </nav>
 
-      <button type="button" class="icon-btn theme-toggle" data-action="toggle-theme" aria-label="Temayı değiştir" title="Temayı değiştir">
-        <svg viewBox="0 0 24 24" class="icon icon--sun" aria-hidden="true"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <svg viewBox="0 0 24 24" class="icon icon--moon" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-      </button>
+      <!-- Alt küme: Ayarlar + tema + kenar çubuğu düğmeleri. Dikey rayda hepsi
+           sol altta toplanır; yatay üst barda nav'ın altında aynı sırada kalır.
+           Ayarlar, diğer bölümler gibi .nav__item olduğu için etkin durum
+           işaretlemesi (is-active) ve klavye/aria davranışı kendiliğinden korunur. -->
+      <div class="topbar__foot">
+        <button type="button" class="nav__item nav__item--foot" data-action="set-view" data-view="settings">
+          <svg viewBox="0 0 24 24" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 7h3M4 17h5M13 17h7"/><circle cx="15" cy="7" r="2"/><circle cx="11" cy="17" r="2"/></svg><span class="nav__label">Ayarlar</span></button>
+
+        <button type="button" class="icon-btn theme-toggle" data-action="toggle-theme" aria-label="Temayı değiştir" title="Temayı değiştir">
+          <svg viewBox="0 0 24 24" class="icon icon--sun" aria-hidden="true"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 24 24" class="icon icon--moon" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+
+        <button type="button" class="icon-btn sidebar-toggle" data-action="toggle-sidebar"
+                aria-controls="nav" aria-expanded="true" aria-label="Sidebar'ı daralt" title="Sidebar'ı daralt">
+          <svg viewBox="0 0 24 24" class="icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+        </button>
+      </div>
     </div>
   </header>
 
