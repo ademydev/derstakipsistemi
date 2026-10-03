@@ -579,6 +579,32 @@
     return String(goal.text || '').trim() + ' · ' + Math.max(1, intOr(goal.target, 1)) + ' Soru';
   }
 
+  /* Ders kartında gösterilecek hedef: birden fazla hedef varsa önce
+     henüz dolmamış (aktif) hedef seçilir, yoksa ilk hedef gösterilir.
+     Yeni bir veri alanı açılmaz; mevcut course.goals kullanılır. */
+  function pickCardGoal(course) {
+    const goals = (course && course.goals) || [];
+    if (!goals.length) return null;
+    const active = goals.find(function (goal) { return !goalProgress(goal).complete; });
+    return active || goals[0];
+  }
+
+  /* Kart üzerindeki ilerleme: `done` mevcut modelde 0..target arası gerçek
+     tamamlanan soru sayısıdır (normalizeItem/listUpdate tarafından korunur).
+     Günlük hedefte dün tamamlanan hedef, goalComplete() ile aynı kuralla
+     bugün sıfırlanmış sayılır — veriye yazılmaz, yalnızca okunur. */
+  function goalProgress(goal) {
+    const target = Math.max(1, intOr(goal.target, 1));
+    let done = clamp(intOr(goal.done, 0), 0, target);
+    if (isDailyGoal(goal) && goal.doneOn !== todayKey()) done = 0;
+    return {
+      target: target,
+      done: done,
+      percent: clamp(Math.round((done / target) * 100), 0, 100),
+      complete: done >= target
+    };
+  }
+
   function counts() {
     const out = { courses: 0, topics: 0, goals: 0, homeworks: 0, repeats: 0, notes: 0, sources: 0 };
     allCourses().forEach(function (entry) {
@@ -931,11 +957,34 @@
     catch (e) { return date.getDate() + '.' + (date.getMonth() + 1); }
   }
 
-  /* Ders kartı — yalnızca ders adı, saat ve öğretmen gösterir. */
+  /* Kartın altına yerleşen soru hedefi bloğu: küçük etiket, hedef adı,
+     ince ilerleme çubuğu ve "tamamlanan / hedef" sayısı.
+     Hedef yoksa boş blok üretilmez (kart boyu değişmez). */
+  function renderCourseGoal(course) {
+    const goal = pickCardGoal(course);
+    if (!goal) return '';
+    const progress = goalProgress(goal);
+    const name = String(goal.text || '').trim();
+    const label = name ? name + ' · ' + progress.target + ' Soru' : progress.target + ' Soru';
+
+    return '<div class="course__goal' + (progress.complete ? ' is-complete' : '') + '">' +
+      '<span class="course__goal-label">Soru Hedefi</span>' +
+      '<span class="course__goal-name" title="' + esc(label) + '">' + esc(label) + '</span>' +
+      '<span class="course__goal-row">' +
+        '<span class="course__bar" aria-hidden="true">' +
+          '<span class="course__bar-fill" style="width:' + progress.percent + '%"></span>' +
+        '</span>' +
+        '<span class="course__goal-count">' + progress.done + ' / ' + progress.target + '</span>' +
+      '</span>' +
+    '</div>';
+  }
+
+  /* Ders kartı — ders adı, saat, öğretmen ve varsa soru hedefi ilerlemesi. */
   function renderCourseCard(course, dayId) {
     const meta = [];
     if (course.time) meta.push('<span class="course__time">' + ICONS.clock + esc(course.time) + '</span>');
     if (course.teacher) meta.push('<span class="course__teacher">' + ICONS.user + esc(course.teacher) + '</span>');
+    const goal = renderCourseGoal(course);
 
     return '<div class="course" draggable="true" role="button" tabindex="0"' +
         ' data-action="open-course" data-id="' + esc(course.id) +
@@ -952,6 +1001,7 @@
         '<button type="button" class="mini" data-action="shift-course" data-id="' + esc(course.id) +
           '" data-delta="1" title="Aşağı taşı" aria-label="Aşağı taşı">' + ICONS.down + '</button>' +
       '</div>' +
+      goal +
     '</div>';
   }
 
@@ -1121,9 +1171,13 @@
       '</div>' +
       (total ? '' : '<div class="empty"><h3>Bugün için ders yok.</h3>' +
         '<p>' + esc(DAY_BY_ID[dayId].label) + ' gününe ders eklemek için yukarıdaki butonu kullanabilirsin.</p></div>') +
-      (pendingPanel ? '<div class="panels">' + pendingPanel + '</div>' : '') +
-      '<div class="week week--single mt">' +
-        renderDay(dayId, { highlightToday: true }) +
+      /* Gün kartı ile "Yapılacaklar" paneli yan yana: geniş ekranı dengeli
+         kullanır, panel tek kolonda tüm sayfayı gereğinden fazla kaplamaz. */
+      '<div class="today-grid' + (pendingPanel ? '' : ' is-solo') + '">' +
+        '<div class="week week--single">' +
+          renderDay(dayId, { highlightToday: true }) +
+        '</div>' +
+        (pendingPanel ? '<div class="today-grid__side">' + pendingPanel + '</div>' : '') +
       '</div>' +
     '</section>';
   }

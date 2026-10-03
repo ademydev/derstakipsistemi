@@ -51,6 +51,10 @@
   --r-lg: 16px;
   --r-full: 999px;
   --pad-day: 12px;
+  /* Kabuk (üst bar + ana içerik) genişliği: iki alan aynı değeri paylaşır,
+     böylece başlık ile içerik aynı yatay ritimde hizalanır. */
+  --shell-max: 1680px;
+  --shell-pad: 18px;
   --ring: 0 0 0 3px rgba(79, 70, 229, 0.20);
 }
 
@@ -145,7 +149,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 
 .topbar__inner {
-  max-width: 1500px; margin: 0 auto; padding: 10px 18px;
+  max-width: var(--shell-max); margin: 0 auto; padding: 10px var(--shell-pad);
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
 }
 
@@ -194,12 +198,12 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 [data-theme="dark"] .icon--sun { display: none; }
 
 /* -------------------------- 4) SAYFA YAPISI ----------------------------- */
-.main { max-width: 1500px; margin: 0 auto; padding: 22px 18px 72px; }
+.main { max-width: var(--shell-max); margin: 0 auto; padding: 22px var(--shell-pad) 72px; }
 .main:focus { outline: none; }
 
 .page__head {
   display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 16px; flex-wrap: wrap; margin-bottom: 18px;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 16px;
 }
 .page__head h2 { font-size: 22px; }
 .page__sub { font-size: 13px; color: var(--text-mute); margin-top: 3px; }
@@ -269,7 +273,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 /* --------------------------- 6) BOŞ DURUM ------------------------------- */
 .empty {
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
-  padding: 22px 24px; margin-bottom: 20px; border-radius: var(--r-lg);
+  padding: 22px 24px; margin-bottom: 16px; border-radius: var(--r-lg);
   background: var(--surface); border: 1px solid var(--border);
   box-shadow: var(--shadow-xs);
 }
@@ -285,8 +289,18 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   grid-template-columns: repeat(7, minmax(0, 1fr));
   align-items: start;
 }
-.week--single { grid-template-columns: minmax(0, 760px); }
+.week--single { grid-template-columns: min(1120px, 100%); }
 .week--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Bugün sayfası: gün kartı + yan panel dengeli iki kolon.
+   Panel varken gün kartı kolonun tamamını, yoksa kontrollü genişliği alır. */
+.today-grid {
+  display: grid; gap: 16px; align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, clamp(320px, 28%, 460px));
+}
+.today-grid.is-solo { grid-template-columns: minmax(0, 1fr); }
+.today-grid:not(.is-solo) .week--single { grid-template-columns: minmax(0, 1fr); }
+.today-grid__side { min-width: 0; }
 
 /* ---------------------------- 8) GÜN KARTI ------------------------------ */
 .day {
@@ -382,7 +396,7 @@ body.is-dragging .slot__empty.drop-target {
 
 /* --------------------------- 9) DERS KARTI ------------------------------ */
 .course {
-  position: relative; display: flex; align-items: center; gap: 8px;
+  position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   padding: 8px 8px 8px 11px; border-radius: var(--r-md);
   background: var(--surface-2); border: 1px solid var(--border);
   cursor: pointer;
@@ -422,6 +436,46 @@ body.is-dragging .slot__empty.drop-target {
 .course__tools { display: flex; flex-direction: column; gap: 1px; opacity: 0; transition: opacity 0.15s; }
 .course:hover .course__tools, .course:focus-within .course__tools { opacity: 1; }
 .course__tools .mini { width: 20px; height: 18px; font-size: 11px; }
+
+/* Ders kartının alt satırına yerleşen soru hedefi: etiket + hedef adı +
+   ince ilerleme çubuğu + "tamamlanan / hedef". Yalnızca hedef varsa
+   render edilir; çubuk rengi dersin mevcut bölüm rengiyle (Sabah/Okul/
+   Akşam) uyumludur. */
+.course__goal {
+  flex: 1 1 100%;
+  min-width: 0;
+  /* Metin sütunu, kartın ilk satırındaki ders adıyla aynı hizada başlasın
+     (tutamaç 14px + 8px boşluk). */
+  padding-left: 22px;
+  display: flex; flex-direction: column; gap: 3px;
+  padding-top: 7px; margin-top: 1px;
+  border-top: 1px solid var(--border);
+}
+.course__goal-label {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-mute);
+}
+.course__goal-name {
+  font-size: 11.5px; font-weight: 600; line-height: 1.3; color: var(--text-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.course__goal-row { display: flex; align-items: center; gap: 7px; margin-top: 2px; }
+.course__bar {
+  flex: 1; min-width: 0; height: 5px; overflow: hidden;
+  border-radius: var(--r-full); background: var(--surface-3);
+}
+.course__bar-fill {
+  display: block; height: 100%; border-radius: inherit;
+  background: var(--accent); transition: width 0.25s ease;
+}
+.course[data-slot="morning"] .course__bar-fill { background: var(--morning); }
+.course[data-slot="evening"] .course__bar-fill { background: var(--evening); }
+.course__goal-count {
+  flex: none; font-size: 11px; font-weight: 650; color: var(--text-mute);
+  font-variant-numeric: tabular-nums;
+}
+.course__goal.is-complete .course__goal-label,
+.course__goal.is-complete .course__goal-count { color: var(--ok); }
 
 .chip {
   display: inline-flex; align-items: center; gap: 4px; flex: none;
@@ -582,7 +636,7 @@ textarea { resize: vertical; min-height: 64px; line-height: 1.45; }
 /* ------------------------ AYARLAR / PANELLER ---------------------------- */
 .panels {
   display: grid; gap: 16px; align-items: start;
-  grid-template-columns: repeat(auto-fit, minmax(305px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
 }
 .panel {
   display: flex; flex-direction: column; gap: 12px; padding: 18px;
@@ -625,6 +679,13 @@ textarea { resize: vertical; min-height: 64px; line-height: 1.45; }
 /* --------------------------- 16) RESPONSIVE ----------------------------- */
 @media (max-width: 1340px) { .week { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 1000px) { .week { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* Bugün sayfası: iki kolon dar ekranda alt alta iner, yan panel
+   tüm sayfayı kaplamayacak şekilde kontrollü genişlikte kalır. */
+@media (max-width: 1080px) {
+  .today-grid, .today-grid.is-solo { grid-template-columns: minmax(0, 1fr); }
+  .today-grid__side { max-width: 620px; }
+}
 
 @media (max-width: 860px) {
   .week { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -676,7 +737,7 @@ textarea { resize: vertical; min-height: 64px; line-height: 1.45; }
 /* --------------------------- 18) YARDIMCI SINIFLAR ---------------------- */
 .mt { margin-top: 16px; }
 .mt-sm { margin-top: 8px; }
-.hint--block { display: block; margin-top: 14px; }
+.hint--block { display: block; margin-top: 16px; }
 
 /* --------------------------- 19) BULUT SENKRONİZASYONU ------------------ */
 #sync-status.is-error { color: var(--danger); }
