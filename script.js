@@ -1409,9 +1409,12 @@
       /* Gün kartı ile "Yapılacaklar" paneli yan yana: geniş ekranı dengeli
          kullanır, panel tek kolonda tüm sayfayı gereğinden fazla kaplamaz. */
       '<div class="today-grid' + (pendingPanel ? '' : ' is-solo') + '">' +
-        '<div class="week week--single">' +
-          renderDay(dayId, { highlightToday: true }) +
-        '</div>' +
+        '<div class="week week--single today-layout">' +
+          renderDay(dayId, {
+            slots: ['morning', 'school', 'evening'],
+            highlightToday: true
+           }) +
+        ' </div>' +
         (pendingPanel ? '<div class="today-grid__side">' + pendingPanel + '</div>' : '') +
       '</div>' +
     '</section>';

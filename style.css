@@ -1346,3 +1346,40 @@ input:-webkit-autofill:focus {
   }
 
 }
+
+@media screen and (min-width: 721px) {
+  .today-layout .day__body {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 16px;
+  }
+
+  .today-layout .slot {
+    min-width: 0;
+  }
+}
+
+@media screen and (max-width: 720px) {
+  .today-layout .day__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+
+/* Bugün ekranı: gün kartı kullanılabilir alanın tamamını kaplasın */
+.today-layout.week--single {
+  width: 100%;
+  max-width: none;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.today-layout .day {
+  width: 100%;
+}
+
+.today-layout .day__body:not(.day__body--empty) {
+  width: 100%;
+  box-sizing: border-box;
+}
