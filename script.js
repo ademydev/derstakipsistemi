@@ -1416,21 +1416,29 @@
     '</div>';
   }
 
+  /* Okul Programı yalnızca hafta içini kapsar: Cumartesi ve Pazar çıkarıldı.
+     GÜNLER (DAYS) ve veri yapısı DEĞİŞMEZ — o güne kayıtlı okul dersleri SİLİNMEZ,
+     yalnızca bu ekranda görünmez; Haftalık Program'da olduğu gibi durmaya devam eder. */
+  const SCHOOL_DAYS = DAYS.filter(function (d) { return d.id !== 'saturday' && d.id !== 'sunday'; });
+
   function viewSchool() {
     const todayId = todayDayId();
-    const hasAny = DAYS.some(function (day) { return coursesOf(day.id, 'school').length > 0; });
+    const hasAny = SCHOOL_DAYS.some(function (day) { return coursesOf(day.id, 'school').length > 0; });
+    /* Bugün hafta sonuysa "Ders Ekle" o güne eklerdi ve kart bu ekranda hiç
+       görünmezdi; bu yüzden hafta içi değilse ilk okul gününe (Pazartesi) sabitlenir. */
+    const addDayId = SCHOOL_DAYS.some(function (d) { return d.id === todayId; }) ? todayId : SCHOOL_DAYS[0].id;
     return '<section class="page">' +
       pageHeader('Okul Programım',
         'Okulda işleyeceğin dersler. Kişisel çalışma planından ayrı tutulur.',
-        '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' + esc(todayId) +
+        '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' + esc(addDayId) +
           '" data-slot="school">' + ICONS.plus + 'Ders Ekle</button>') +
       (hasAny ? '' : '<div class="empty">' +
         '<h3>Okul programında henüz ders yok.</h3>' +
         '<p>Okulda gördüğün dersleri buraya ekle. Bir güne istediğin kadar ders ekleyebilirsin; her ders kendi kartında görünür.</p>' +
-        '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' + esc(todayId) +
+        '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' + esc(addDayId) +
           '" data-slot="school">' + ICONS.plus + 'İlk okul dersini ekle</button></div>') +
-      '<div class="week">' +
-        DAYS.map(function (day) {
+      '<div class="week week--five">' +
+        SCHOOL_DAYS.map(function (day) {
           return renderDay(day.id, {
             slots: ['school'],
             emptyText: 'Henüz okul dersi yok',

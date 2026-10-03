@@ -381,6 +381,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .week--single { grid-template-columns: min(1180px, 100%); }
 .week--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Okul Programı: Cumartesi ve Pazar çıkarıldığı için 5 gün tek satırda. */
+.week--five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 
 /* Bugün sayfası: gün kartı + yan panel dengeli iki kolon. */
 .today-grid {
@@ -1018,21 +1020,29 @@ input:-webkit-autofill:focus {
 
 
 /* ---------------------------- 18) RESPONSIVE ---------------------------- */
-/* Kırılım öncesi düzeltme: .week--single ve .week--two kendi kurallarını
+/* Kırılım öncesi düzeltme: .week--single, .week--two ve .week--five kendi kurallarını
    .week media kurallarından sonra da korusun. Aksi halde "Bugün" sayfasındaki
    tek gün kartı dar ekranlarda 1/4 genişliğe düşerdi. */
 .week.week--single { grid-template-columns: min(1180px, 100%); }
 .week.week--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.week.week--five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 
 /* Haftalık ızgara: ekran genişliğine göre 7 → 4 → 3 → 2 → 1 sütun.
-   Sidebar açıldığında içerik alanı daraldığı için eşikler yukarı alınır. */
-@media (max-width: 1420px) { .week:not(.week--single):not(.week--two) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (max-width: 1040px) { .week:not(.week--single):not(.week--two) { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 820px)  { .week:not(.week--single):not(.week--two) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+   Sidebar açıldığında içerik alanı daraldığı için eşikler yukarı alınır.
+   :not(.week--five) eklenerek Okul Programı'nın 5 sütunlu düzeni bu merdivenin
+   dışında tutulur. */
+@media (max-width: 1420px) { .week:not(.week--single):not(.week--two):not(.week--five) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 1040px) { .week:not(.week--single):not(.week--two):not(.week--five) { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 820px)  { .week:not(.week--single):not(.week--two):not(.week--five) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) {
   .week.week--two { grid-template-columns: minmax(0, 1fr); }
-  .week:not(.week--single):not(.week--two) { grid-template-columns: minmax(0, 1fr); }
+  .week:not(.week--single):not(.week--two):not(.week--five) { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Okul Programı (5 gün): 5 → 3 → 2 → 1 sütun. */
+@media (max-width: 1040px) { .week.week--five { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 820px)  { .week.week--five { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px)  { .week.week--five { grid-template-columns: minmax(0, 1fr); } }
 
 /* Haftalık Program ve Çalışma Programı ekranları: 7 gün tek satırda çok sıkışıyor,
    kartlar düzgün okunmuyordu. Bu iki ekran 3 sütuna geçirildi:
@@ -1179,6 +1189,8 @@ input:-webkit-autofill:focus {
   .topbar, .theme-toggle, .toast-root, .drawer, .modal-wrap, .page__actions, .empty { display: none !important; }
   .main { padding: 0; max-width: none; margin-left: 0; }
   .week { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  /* Okul Programı yazdırmada da 5 sütun kalsın (Cmt/Paz yok). */
+  .week.week--five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .day { box-shadow: none; border-color: #ccc; break-inside: avoid; }
   .course { background: #fff; break-inside: avoid; }
 }
