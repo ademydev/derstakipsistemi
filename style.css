@@ -528,6 +528,7 @@ body.is-dragging .slot__empty.drop-target {
 .course__name {
   font-size: 13.2px; font-weight: 650; color: var(--text); line-height: 1.28;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden; overflow-wrap: break-word;
 }
 .course__meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -561,6 +562,7 @@ body.is-dragging .slot__empty.drop-target {
 .course__goal-name {
   font-size: 11.2px; font-weight: 600; line-height: 1.32; color: var(--text-soft);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden; overflow-wrap: break-word;
 }
 /* Çubuk dar kartta tam genişliği kullanır; geniş kartta orantısı uzamasın diye
