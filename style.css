@@ -1034,6 +1034,31 @@ input:-webkit-autofill:focus {
   .week:not(.week--single):not(.week--two) { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* Haftalık Program ve Çalışma Programı ekranları: 7 gün tek satırda çok sıkışıyor,
+   kartlar düzgün okunmuyordu. Bu iki ekran 3 sütuna geçirildi:
+     1. satır  Pzt – Sal – Çar
+     2. satır  Per – Cum – Cmt
+     3. satır  Paz (tek başına, ilk sütunda)
+   Yalnızca yerleşim değişir — gün sırası DOM sırasıdır (Pzt → Paz) ve ızgara bu
+   sırayı korur, dolayısıyla Pazar kendiliğinden 3. satırın ilk sütununda tek başına
+   durur; kalan iki hücre boş kalır. Kart içerikleri, ekleme/silme/düzenleme ve
+   sürükleme-taşıma mantığına dokunulmaz.
+
+   Kapsam — sadece bu iki ekran, iki ayrı işaretle:
+     • Haftalık Program: .week'in hemen ardından .hint--block ipucu gelir.
+     • Çalışma Programı: ızgara "mt" sınıfıyla gelir (başlıktan sonra boşluk);
+       bu birleşim JS'de yalnızca bir kez geçiyor.
+   "Bugün" (week--single) ve "Okul Programım" bu seçicilere girmez; 7 sütunlu
+   düzenleri olduğu gibi kalır. `:has()` temel bir özelliktir (dosyada kullanılan
+   color-mix'ten daha eski), tarayıcı desteği güvenlidir.
+
+   Sıralama: bu kurallar yukarıdaki .week media kurallarından SONRA gelir ve özgüllükleri
+   eşittir (0,3,0) — bu yüzden bu iki ekranın düzeni onları ezer.
+   @media screen ile sınırlanır: yazdırmada mevcut kompakt 7 sütunlu düzen korunur. */
+@media screen { .page .week:has(+ .hint--block), .page .week.mt { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media screen and (max-width: 820px) { .page .week:has(+ .hint--block), .page .week.mt { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media screen and (max-width: 640px) { .page .week:has(+ .hint--block), .page .week.mt { grid-template-columns: minmax(0, 1fr); } }
+
 /* Bugün sayfası: iki kolon dar ekranda alt alta iner. */
 @media (max-width: 1120px) {
   .today-grid, .today-grid.is-solo { grid-template-columns: minmax(0, 1fr); }
