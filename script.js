@@ -51,6 +51,7 @@
   }
   const ICONS = {
     plus: icon('<path d="M12 5v14M5 12h14"/>'),
+    minus: icon('<path d="M5 12h14"/>'),
     close: icon('<path d="M6 6l12 12M18 6 6 18"/>'),
     drag: icon('<path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/>', 3),
     up: icon('<path d="M6 14l6-6 6 6"/>'),
@@ -554,25 +555,28 @@
   function isDailyGoal(goal) { return !goal || goal.daily !== false; }
 
   /* Günlük hedef yalnızca tamamlandığı gün geçerlidir (doneOn === bugün).
-     Sıfırlama veritabanına yazılmaz, yalnızca okuma anında değerlendirilir. */
+     Sıfırlama veritabanına yazılmaz, yalnızca okuma anında değerlendirilir.
+     Tamamlanma artık ikili değil: bu sayı hedefe ulaştığında hedef tamamdır.
+     Bu yüzden kural tek kaynaktan (goalProgress) okunur. */
   function goalComplete(goal) {
-    if (!goal) return false;
-    return isDailyGoal(goal) ? (goal.doneOn === todayKey()) : !!goal.done;
+    return goalProgress(goal).complete;
   }
 
-  function goalDone(goals) {
-    return (goals || []).filter(function (goal) { return goalComplete(goal); });
-  }
-
-  /* Hedeflerin toplamı: kaç hedef tamamlandı, kaç soru tamamlandı. */
+  /* Hedeflerin toplamı: kaç hedef tamamlandı, kaç soru çözüldü / toplam kaç
+     soru hedeflendi. Çözülen sayı her hedefin GERÇEK `done` değerinden gelir
+     (kısmi ilerleme de doğru yansır), sabit sayı kullanılmaz. */
   function goalsTotals(goals) {
     const list = goals || [];
-    const doneGoals = goalDone(list);
     let target = 0;
     let done = 0;
-    list.forEach(function (goal) { target += Math.max(1, intOr(goal.target, 1)); });
-    doneGoals.forEach(function (goal) { done += Math.max(1, intOr(goal.target, 1)); });
-    return { count: list.length, doneCount: doneGoals.length, target: target, done: done };
+    let doneCount = 0;
+    list.forEach(function (goal) {
+      const progress = goalProgress(goal);
+      target += progress.target;
+      done += progress.done;
+      if (progress.complete) doneCount += 1;
+    });
+    return { count: list.length, doneCount: doneCount, target: target, done: done };
   }
 
   function goalLabel(goal) {
@@ -589,10 +593,12 @@
     return active || goals[0];
   }
 
-  /* Kart üzerindeki ilerleme: `done` mevcut modelde 0..target arası gerçek
-     tamamlanan soru sayısıdır (normalizeItem/listUpdate tarafından korunur).
-     Günlük hedefte dün tamamlanan hedef, goalComplete() ile aynı kuralla
-     bugün sıfırlanmış sayılır — veriye yazılmaz, yalnızca okunur. */
+  /* Hedef ilerlemesi: `done` mevcut modelde 0..target arası GERÇEK çözülen
+     soru sayısıdır (normalizeItem/listUpdate tarafından sınırlar içinde
+     korunur). Hedef ikili değildir: 7/20, 15/20, 20/20 gibi her ara değer
+     geçerlidir. Günlük hedefte ilerleme bugüne ait değilse (doneOn !== bugün)
+     okunurken 0 kabul edilir — veriye yazılmaz, yalnızca okunur.
+     Yüzde sabit değil, her hedefin kendi target değerinden hesaplanır. */
   function goalProgress(goal) {
     const target = Math.max(1, intOr(goal.target, 1));
     let done = clamp(intOr(goal.done, 0), 0, target);
@@ -603,6 +609,70 @@
       percent: clamp(Math.round((done / target) * 100), 0, 100),
       complete: done >= target
     };
+  }
+
+  /* Hedefi kimliğinden bulur (ders + hedef birlikte döner). */
+  function findGoal(courseId, itemId) {
+    const found = findCourse(courseId);
+    if (!found) return null;
+    const goal = found.course.goals.find(function (g) { return g.id === itemId; });
+    if (!goal) return null;
+    return { course: found.course, goal: goal };
+  }
+
+  /* İlerlemeyi tek noktadan, her zaman 0 <= done <= target sınırında yazar.
+     Sabit bir üst sınır yoktur: sınır hedefin kendi target değeridir.
+     Günlük hedefte ilerleme bugüne yazılır; 0 ise gün anahtarı temizlenir,
+     böylece mevcut okuma mantığı ertesi gün 0 gösterir (günlük sıfırlama). */
+  function writeGoalDone(goal, done) {
+    if (!goal) return null;
+    const target = Math.max(1, intOr(goal.target, 1));
+    goal.target = target;
+    goal.done = clamp(intOr(done, 0), 0, target);
+    if (isDailyGoal(goal)) goal.doneOn = goal.done > 0 ? todayKey() : null;
+    else goal.doneOn = goal.done > 0 ? (goal.doneOn || todayKey()) : null;
+    return goal;
+  }
+
+  /* Adım adım artır / azalt. Temel değer okuma anındaki gerçek ilerlemedir
+     (günlük hedefte dün girilen değer bugün 0 sayılır). Alt sınır 0, üst
+     sınır hedefin target değeridir — sabit maksimum kullanılmaz. */
+  function goalAdjust(courseId, itemId, delta) {
+    const hit = findGoal(courseId, itemId);
+    if (!hit) return null;
+    const current = goalProgress(hit.goal).done;
+    writeGoalDone(hit.goal, current + intOr(delta, 0));
+    hit.course.updatedAt = nowISO();
+    save();
+    return hit.goal;
+  }
+
+  /* Doğrudan sayı girişi. Yalnızca 0..target arası tam sayı kabul edilir;
+     negatif, hedeften büyük, ondalık, boş veya metin reddedilir. */
+  function goalSetDone(courseId, itemId, value) {
+    const hit = findGoal(courseId, itemId);
+    if (!hit) return { ok: false, reason: 'missing' };
+    const target = Math.max(1, intOr(hit.goal.target, 1));
+    const raw = String(value === undefined || value === null ? '' : value).trim();
+    if (!/^\d+$/.test(raw)) return { ok: false, reason: 'invalid', target: target };
+    const n = parseInt(raw, 10);
+    if (n > target) return { ok: false, reason: 'range', target: target };
+    writeGoalDone(hit.goal, n);
+    hit.course.updatedAt = nowISO();
+    save();
+    return { ok: true, goal: hit.goal };
+  }
+
+  /* "Tümünü Tamamla": completed = target. Değer dinamiktir (hedef 20 ise 20,
+     50 ise 50), kodda hiçbir sabit tamamlama sayısı yoktur. */
+  function goalCompleteAll(courseId, itemId) {
+    const hit = findGoal(courseId, itemId);
+    if (!hit) return null;
+    const target = Math.max(1, intOr(hit.goal.target, 1));
+    writeGoalDone(hit.goal, target);
+    hit.course.updatedAt = nowISO();
+    save();
+    return hit.goal;
   }
 
   function counts() {
@@ -785,31 +855,6 @@
     found.course[snapshot.key].splice(snapshot.index, 0, snapshot.item);
     found.course.updatedAt = nowISO();
     save();
-  }
-
-  /* Hedef tek tikle tamamlanır. Günlük hedefte tamamlanma tarihi doneOn'a
-     yazılır; ertesi gün arayüz bunu bugünün tarihi olmadığı için okurken
-     kendiliğinden sıfırlamış sayılır (DB'ye ayrı bir yazma yapılmaz). */
-  function goalToggle(courseId, itemId) {
-    const found = findCourse(courseId);
-    if (!found) return null;
-    const goal = found.course.goals.find(function (g) { return g.id === itemId; });
-    if (!goal) return null;
-    const target = Math.max(1, intOr(goal.target, 1));
-    if (isDailyGoal(goal)) {
-      if (goal.doneOn === todayKey()) { goal.doneOn = null; goal.done = 0; }
-      else { goal.doneOn = todayKey(); goal.done = target; }
-    } else if (goalComplete(goal)) {
-      goal.done = 0;
-      goal.doneOn = null;
-    } else {
-      goal.done = target;
-      goal.doneOn = todayKey();
-    }
-    goal.target = target;
-    found.course.updatedAt = nowISO();
-    save();
-    return goal;
   }
 
   /* ------------------------ Arayüz durumu yardımcıları ------------------- */
@@ -1526,8 +1571,12 @@
       '" data-course="' + esc(course.id) + '">' + field + formActions(key) + '</form>';
   }
 
-  /* Soru hedefleri: tek satırda tik + "hedef · N Soru" + "her gün" etiketi.
-     Günlük hedef, tamamlanma günün sonunda arayüzce okunurken sıfırlanır. */
+  /* Soru hedefleri: her satırda 'hedef · N Soru' + 'her gün' etiketi; altında
+     gerçek ilerleme çubuğu (çözülen / hedef, %) ve ilerlemeyi düzenleme
+     kontrolleri ([-] [sayı] [+], Tümünü Tamamla). Tek tamamlama aksiyonu
+     'Tümünü Tamamla'dır (completed = target). İlerleme tek kaynaktan
+     (goal.done) okunur; günlük hedef gün sonunda okunurken sıfırlanır.
+     Sabit soru sayısı yoktur; sınır her hedefin kendi target değeridir. */
   function renderGoalList(course) {
     const config = LISTS.goals;
     const goals = course.goals;
@@ -1538,18 +1587,42 @@
     const rows = goals.map(function (goal) {
       const editKey = formKey('goals', goal.id);
       if (isFormOpen(editKey)) return renderForm('goals', course, goal, editKey);
-      const done = goalComplete(goal);
-      return '<div class="item' + (done ? ' is-done' : '') + '">' +
-        '<label class="item__check">' +
-          '<input class="item__input" type="checkbox"' + (done ? ' checked' : '') +
-            ' data-action="goal-toggle" data-course="' + esc(course.id) +
-            '" data-key="goals" data-id="' + esc(goal.id) + '">' +
-          '<span class="box">' + ICONS.check + '</span>' +
-          '<span class="item__text">' + esc(goalLabel(goal)) +
+      const progress = goalProgress(goal);
+      const complete = progress.complete;
+      const name = String(goal.text || '').trim();
+      const groupLabel = name ? name + ' soru hedefi' : 'Soru hedefi';
+      return '<div class="item item--goal' + (complete ? ' is-done' : '') + '">' +
+        '<div class="goal__head">' +
+          '<span class="goal__title item__text">' + esc(goalLabel(goal)) +
             (isDailyGoal(goal) ? ' <span class="chip chip--hint">her gün</span>' : '') +
           '</span>' +
-        '</label>' +
-        '<div class="item__tools">' + itemTools(course.id, 'goals', goal.id) + '</div>' +
+          '<div class="item__tools">' + itemTools(course.id, 'goals', goal.id) + '</div>' +
+        '</div>' +
+        '<div class="goal__meta">' +
+          '<span class="goal__bar" role="progressbar" aria-valuemin="0" aria-valuemax="' + progress.target +
+            '" aria-valuenow="' + progress.done + '" aria-label="' + esc(groupLabel) + ' ilerlemesi">' +
+            '<span class="goal__bar-fill" style="width:' + progress.percent + '%"></span>' +
+          '</span>' +
+          '<span class="goal__count">' + progress.done + ' / ' + progress.target + '</span>' +
+          '<span class="goal__percent">%' + progress.percent + '</span>' +
+        '</div>' +
+        '<div class="goal__controls">' +
+          '<div class="stepper" role="group" aria-label="' + esc(groupLabel) + ' ilerlemesi">' +
+            '<button type="button" class="stepper__btn" data-action="goal-step" data-delta="-1"' +
+              ' data-course="' + esc(course.id) + '" data-id="' + esc(goal.id) +
+              '" title="1 azalt" aria-label="1 azalt">' + ICONS.minus + '</button>' +
+            '<input class="stepper__input" type="number" inputmode="numeric" min="0" max="' + progress.target +
+              '" step="1" value="' + progress.done + '" data-action="goal-set"' +
+              ' data-course="' + esc(course.id) + '" data-id="' + esc(goal.id) +
+              '" aria-label="' + esc(groupLabel) + ' için çözülen soru sayısı">' +
+            '<button type="button" class="stepper__btn" data-action="goal-step" data-delta="1"' +
+              ' data-course="' + esc(course.id) + '" data-id="' + esc(goal.id) +
+              '" title="1 artır" aria-label="1 artır">' + ICONS.plus + '</button>' +
+          '</div>' +
+          '<button type="button" class="btn btn--soft btn--sm goal__all" data-action="goal-complete-all"' +
+            ' data-course="' + esc(course.id) + '" data-id="' + esc(goal.id) +
+            '"' + (complete ? ' disabled' : '') + '>Tümünü Tamamla</button>' +
+        '</div>' +
       '</div>';
     }).join('');
 
@@ -1886,19 +1959,20 @@
     if (!text) return;
 
     if (kind === 'goals') {
-      /* Soru sayısı değişirse tamamlanma da yeni hedefe göre ayarlanır;
-         günlük hedefte tamamlanma günü korunur. */
+      /* Düzenleme yalnızca metin ve hedef sayısını değiştirir; mevcut
+         ilerleme (done) KORUNUR. Yeni hedef daha küçükse ilerleme hedefe
+         kırpılır (0 <= done <= target). Günlük hedefin gün anahtarı bozulmaz. */
       const target = Math.max(1, intOr(data.get('target'), 20));
       const existing = itemId ? found.course.goals.find(function (g) { return g.id === itemId; }) : null;
       if (existing) {
-        const wasComplete = goalComplete(existing);
         listUpdate(courseId, 'goals', itemId, {
           text: text,
           target: target,
-          done: wasComplete ? target : 0,
-          doneOn: wasComplete ? (existing.doneOn || todayKey()) : null
+          done: clamp(intOr(existing.done, 0), 0, target)
         });
       } else {
+        /* Yeni hedef 0'dan başlar; ilerleme hiçbir zaman hazır/örnek bir
+           sayıyla açılmaz. */
         listAdd(courseId, 'goals', { text: text, target: target, done: 0, daily: true, doneOn: null });
       }
     } else if (itemId) {
@@ -1909,6 +1983,21 @@
     closeForm(key);
     render();
     toast(itemId ? SINGULAR[kind] + ' güncellendi.' : SINGULAR[kind] + ' eklendi.');
+  }
+
+  /* Soru hedefi doğrudan sayı girişi (change olayı). Geçersiz giriş
+     (boş, metin, ondalık, negatif veya hedeften büyük) kaydedilmez; kısa
+     bir uyarı gösterilir ve alan mevcut geçerli değere döner. */
+  function handleGoalInput(input) {
+    const result = goalSetDone(input.dataset.course, input.dataset.id, input.value);
+    if (!result) return;
+    if (result.ok) { render(); return; }
+    if (result.reason === 'range') {
+      toast('0 ile ' + result.target + ' arasında bir sayı gir.');
+    } else if (result.reason !== 'missing') {
+      toast('Geçerli bir tam sayı gir.');
+    }
+    render();
   }
 
   function handleCourseSubmit(form) {
@@ -2017,9 +2106,21 @@
         render();
         return true;
 
-      case 'goal-toggle':
-        goalToggle(trigger.dataset.course, trigger.dataset.id);
+      /* Soru hedefi: adım adım artır/azalt. */
+      case 'goal-step':
+        goalAdjust(trigger.dataset.course, trigger.dataset.id, intOr(trigger.dataset.delta, 0));
         render();
+        return true;
+
+      /* Soru hedefi: completed = target (dinamik). */
+      case 'goal-complete-all':
+        goalCompleteAll(trigger.dataset.course, trigger.dataset.id);
+        render();
+        return true;
+
+      /* Doğrudan sayı girişi `change` olayında kaydedilir (handleGoalInput);
+         tıklama sırasında ayrı bir işlem gerekmez. */
+      case 'goal-set':
         return true;
 
       case 'edit-item': {
@@ -2565,7 +2666,11 @@
     document.addEventListener('drop', onDrop);
     document.addEventListener('dragend', clearDragState);
     document.addEventListener('change', function (event) {
-      if (event.target && event.target.id === 'import-input') handleImportFile(event.target);
+      const target = event.target;
+      if (!target || !target.dataset) return;
+      if (target.id === 'import-input') { handleImportFile(target); return; }
+      /* Soru hedefi doğrudan sayı girişi */
+      if (target.dataset.action === 'goal-set') handleGoalInput(target);
     });
 
     if (window.matchMedia) {

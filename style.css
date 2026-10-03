@@ -572,6 +572,72 @@ body.is-dragging .slot__empty.drop-target {
 .item:hover .item__tools, .item:focus-within .item__tools { opacity: 1; }
 .item__text--block { white-space: pre-wrap; }
 
+/* Soru hedefi satırı: başlık + gerçek ilerleme çubuğu + düzenleme kontrolleri.
+   Satır dikey akışa geçer; kontrol alanları küçük ve sakin tutulur. Renkler
+   mevcut tasarım değişkenlerinden (accent/ok/border/text) alınır. Tamamlanma
+   tek aksiyonla (Tümünü Tamamla) yapılır; satır başında checkbox yoktur. */
+.item--goal { flex-direction: column; align-items: stretch; gap: 7px; }
+.goal__head { display: flex; align-items: center; gap: 8px; }
+.goal__title { flex: 1; min-width: 0; }
+.goal__head .item__tools { margin-left: auto; }
+.goal__meta { display: flex; align-items: center; gap: 8px; }
+.goal__bar {
+  flex: 1; max-width: 240px; height: 6px; overflow: hidden;
+  border-radius: var(--r-full); background: var(--surface-3);
+}
+.goal__bar-fill {
+  display: block; height: 100%; border-radius: inherit;
+  background: var(--accent); transition: width 0.25s ease;
+}
+.item--goal.is-done .goal__bar-fill { background: var(--ok); }
+.goal__count {
+  font-size: 12px; font-weight: 650; color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+.goal__percent { font-size: 11px; color: var(--text-mute); font-variant-numeric: tabular-nums; }
+.item--goal.is-done .goal__count,
+.item--goal.is-done .goal__percent { color: var(--ok); }
+
+.goal__controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stepper {
+  display: inline-flex; align-items: center; gap: 3px; flex: none;
+  padding: 2px; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.stepper__btn {
+  width: 24px; height: 24px; display: grid; place-items: center;
+  border: 1px solid transparent; border-radius: var(--r-xs);
+  background: transparent; color: var(--text-soft); line-height: 1;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.stepper__btn .icon { width: 13px; height: 13px; }
+.stepper__btn:hover { background: var(--accent-soft); color: var(--accent); }
+.stepper__btn:focus-visible { box-shadow: var(--ring); outline: none; }
+.stepper__input[type="number"] {
+  width: 52px; padding: 3px 4px; text-align: center; font-size: 12.5px;
+  font-weight: 600; font-variant-numeric: tabular-nums;
+  border-color: transparent; background: transparent; box-shadow: none;
+}
+.stepper__input[type="number"]:hover { border-color: var(--border); }
+.stepper__input[type="number"]:focus { border-color: var(--accent); background: var(--surface); }
+/* Native number spinner oklarını gizle: sol/sağ stepper butonları zaten var.
+   Alan number olarak kalır; yazma, Enter/blur ile kaydetme ve 0..target
+   doğrulaması değişmez, yalnızca tarayıcının kendi okları görünmez. */
+.stepper__input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.stepper__input[type="number"]::-webkit-outer-spin-button,
+.stepper__input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+.goal__all { margin-left: auto; }
+@media (max-width: 430px) {
+  .goal__all { margin-left: 0; }
+}
+
 /* ------------------------- 12) FORMLAR --------------------------------- */
 .form {
   display: flex; flex-direction: column; gap: 9px; padding: 12px;
