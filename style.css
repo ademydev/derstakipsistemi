@@ -417,7 +417,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   /* Sığmayan rozetler alt satıra geçsin ki gün adı kırpılmasın. */
   flex-wrap: wrap;
 }
-/* Dar sütunda başlık ve tarih üst üste dursun: yatay hizada çakışıyorlar. */
+/* Dar sütunda gün başlığı boşlukta sıkışmasın; tarih satırı kaldırıldığı için
+   başlık tek başına durur. */
 .day__id {
   display: flex; flex-direction: column; align-items: flex-start;
   gap: 0; min-width: 0; flex: 1 1 auto;
@@ -427,7 +428,6 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
 .day--today .day__title { color: var(--accent); }
-.day__date { font-size: var(--t-xs); color: var(--text-mute); white-space: nowrap; line-height: 1.35; }
 .day__tags { display: flex; align-items: center; gap: 5px; flex: none; align-self: flex-start; }
 .day__badge {
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
@@ -536,7 +536,6 @@ body.is-dragging .slot__empty.drop-target {
 .course__meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .course__meta span { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .course__meta .icon { width: 11px; height: 11px; flex: none; }
-.course__time { font-size: var(--t-xs); color: var(--text-soft); }
 .course__teacher {
   font-size: 10.5px; color: var(--text-mute);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

@@ -400,7 +400,7 @@
 
     course = {
       id, name, slot: 'morning' | 'school' | 'evening',
-      teacher: '', time: '', description: '',
+      teacher: '', description: '',
       topics: [{ id, text, done }],
       goals: [{ id, text, target, done, daily, doneOn }],
       homeworks: [{ id, text, done }],
@@ -411,6 +411,7 @@
     }
 
     Bütün listeler boş başlar; arayüz yalnızca doldurulanları gösterir.
+    Saat (time) alanı kaldırıldı: gün kartlarında ve detayda artık tutulmaz.
   */
   function emptyState() {
     const days = {};
@@ -443,11 +444,13 @@
       name: name,
       slot: SLOT_IDS.indexOf(raw.slot) >= 0 ? raw.slot : 'school',
       teacher: String(raw.teacher || ''),
-      time: String(raw.time || ''),
       description: String(raw.description || ''),
       createdAt: raw.createdAt || nowISO(),
       updatedAt: raw.updatedAt || nowISO()
     };
+    /* Saat (time) bilerek okunmuyor: kayıtlı/ithal edilmiş eski verilerde varsa
+       da düşer, yani alan uygulamaya hiç girmez. Kayıt bir sonraki kayıtta
+       temizlenmiş olarak saklanır. */
     Object.keys(LISTS).forEach(function (key) {
       const source = Array.isArray(raw[key]) ? raw[key] : [];
       course[key] = source.map(function (item) { return normalizeItem(item, key); }).filter(Boolean);
@@ -730,7 +733,6 @@
       name: data.name,
       slot: data.slot,
       teacher: data.teacher,
-      time: data.time,
       description: data.description,
       createdAt: nowISO(),
       updatedAt: nowISO()
@@ -1009,10 +1011,33 @@
     evening: { label: 'Akşam', icon: ICONS.moon, hint: 'Akşam çalışması' }
   };
 
+  /* Cumartesi ve Pazar'da okul yoktur; o iki günde "Okul" bölümünün adı
+     "Öğle" görünür (ders kartı düzeni bu günlerde alt alta sıralanır).
+
+     YALNIZCA EKRAN ADI değişir — bölüm kimliği 'school' olarak kalır. Kayıtlı
+     dersler, localStorage/Supabase verisi, sayaçlar ve tüm mantık aynen çalışır;
+     hafta içi hiçbir yerde "Öğle" yazmaz. */
+  const WEEKEND_DAY_IDS = ['saturday', 'sunday'];
+  function isWeekendDay(dayId) {
+    return WEEKEND_DAY_IDS.indexOf(dayId) >= 0;
+  }
+  /* Bölümün o güne göre görünen adı ("Okul" / hafta sonunda "Öğle"). */
+  function slotLabel(dayId, slotId) {
+    const meta = SLOT_UI[slotId];
+    if (!meta) return '';
+    return slotId === 'school' && isWeekendDay(dayId) ? 'Öğle' : meta.label;
+  }
+  /* Bölümün kısa metni: "+" düğmesinin ipucu ve boş-bırakma alanı yazısı. */
+  function slotHint(dayId, slotId) {
+    const meta = SLOT_UI[slotId];
+    if (!meta) return '';
+    return slotId === 'school' && isWeekendDay(dayId) ? 'Öğle' : meta.hint;
+  }
+
   /* Bölüm başlığındaki küçük "+": doğrudan o günün o bölümüne ekler.
      Mevcut ders ekleme modalını (new-course) kullanır; yeni veri yolu açmaz. */
   function slotAddButton(dayId, slotId) {
-    const label = SLOT_UI[slotId].hint + ' ekle';
+    const label = slotHint(dayId, slotId) + ' ekle';
     return '<button type="button" class="slot__add" data-action="new-course" data-day="' + esc(dayId) +
       '" data-slot="' + esc(slotId) + '" title="' + esc(label) + '" aria-label="' + esc(label) + '">' +
       ICONS.plus + '</button>';
@@ -1022,27 +1047,13 @@
   function quickAddButton(dayId, slotId) {
     const meta = SLOT_UI[slotId];
     return '<button type="button" class="quick-add quick-add--' + slotId + '" data-action="new-course" data-day="' +
-      esc(dayId) + '" data-slot="' + esc(slotId) + '">' + ICONS.plus + esc(meta.label) + '</button>';
+      esc(dayId) + '" data-slot="' + esc(slotId) + '">' + ICONS.plus + esc(slotLabel(dayId, slotId)) + '</button>';
   }
 
-  /* Gün başlığındaki tarih: haftanın ilgili günü (Pazartesi başlangıçlı). */
-  function mondayThisWeek() {
-    const now = new Date();
-    const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const offset = (base.getDay() + 6) % 7;
-    base.setDate(base.getDate() - offset);
-    return base;
-  }
-  function dayDate(dayId) {
-    const index = DAYS.findIndex(function (d) { return d.id === dayId; });
-    const base = mondayThisWeek();
-    base.setDate(base.getDate() + Math.max(0, index));
-    return base;
-  }
-  function formatDayDate(date) {
-    try { return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }); }
-    catch (e) { return date.getDate() + '.' + (date.getMonth() + 1); }
-  }
+  /* Gün kartındaki tarih satırı kaldırıldı; buna ait mondayThisWeek /
+     dayDate / formatDayDate yardımcıları da artık kullanılmıyor ve silindi.
+     Bugünün tarihi (Bugün sayfası, gün değişimi izleme) bu yardımcılara
+     bağlı değildir; formatLongDate ve todayKey kullanılır. */
 
   /* Ders kartındaki liste türlerinin ikonu. Anahtarlar LISTS ile birebir aynıdır;
      ileride LISTS'e eklenen bir tür bu eşlemede yoksa jenerik ikonla listeye
@@ -1198,13 +1209,12 @@
     '</div>';
   }
 
-  /* Ders kartı — ad, saat, öğretmen (üstte); soru hedefi ilerlemesi ve
+  /* Ders kartı — ad ve öğretmen (üstte); soru hedefi ilerlemesi ve
      açıklama/konu/ödev/tekrar/not/kaynak kayıtları (altta). Alt bölüm de
      panelin kullandığı aynı veriden beslenir; kart yine tıklanabilirdir ve
      detay paneli aynı şekilde açılır. */
   function renderCourseCard(course, dayId) {
     const meta = [];
-    if (course.time) meta.push('<span class="course__time">' + ICONS.clock + esc(course.time) + '</span>');
     if (course.teacher) meta.push('<span class="course__teacher">' + ICONS.user + esc(course.teacher) + '</span>');
     const expanded = !!ui.expanded[course.id];
     const goal = renderCourseGoal(course, expanded);
@@ -1239,7 +1249,7 @@
     return '<section class="slot slot--' + slotId + '"' + attrs + '>' +
       '<div class="slot__head">' +
         '<span class="slot__icon slot__icon--' + slotId + '" aria-hidden="true">' + meta.icon + '</span>' +
-        '<span class="slot__title">' + esc(meta.label) + '</span>' +
+        '<span class="slot__title">' + esc(slotLabel(dayId, slotId)) + '</span>' +
         (courses.length ? '<span class="slot__count">' + courses.length + '</span>' : '') +
         slotAddButton(dayId, slotId) +
       '</div>' +
@@ -1247,7 +1257,7 @@
         ? '<div class="slot__list">' + courses.map(function (course) {
             return renderCourseCard(course, dayId);
           }).join('') + '</div>'
-        : '<div class="slot__empty"><span>' + esc(meta.label) + ' bölümüne bırak</span></div>') +
+        : '<div class="slot__empty"><span>' + esc(slotLabel(dayId, slotId)) + ' bölümüne bırak</span></div>') +
     '</section>';
   }
 
@@ -1256,7 +1266,7 @@
   function emptyDropZones(dayId, slots) {
     return slots.map(function (slotId) {
       return '<div class="slot__empty" data-drop="slot" data-day="' + esc(dayId) + '" data-slot="' + esc(slotId) + '">' +
-        '<span>' + esc(SLOT_UI[slotId].label) + ' bölümüne bırak</span></div>';
+        '<span>' + esc(slotLabel(dayId, slotId)) + ' bölümüne bırak</span></div>';
     }).join('');
   }
 
@@ -1290,7 +1300,6 @@
       '<header class="day__head">' +
         '<div class="day__id">' +
           '<h3 class="day__title">' + esc(DAY_BY_ID[dayId].label) + '</h3>' +
-          '<span class="day__date">' + esc(formatDayDate(dayDate(dayId))) + '</span>' +
         '</div>' +
         '<div class="day__tags">' +
           (isToday ? '<span class="day__badge">Bugün</span>' : '') +
@@ -1351,7 +1360,7 @@
           return renderDay(day.id, { highlightToday: day.id === todayId });
         }).join('') +
       '</div>' +
-      '<p class="hint hint--block">Her ders kartında adı, saati, öğretmeni ve eklediğin bilgiler (açıklama, konu, ödev, tekrar, not, kaynak) ' +
+      '<p class="hint hint--block">Her ders kartında adı, öğretmeni ve eklediğin bilgiler (açıklama, konu, ödev, tekrar, not, kaynak) ' +
       'kısaca görünür; "Daha fazla" ile hepsini açabilirsin. Kartın kendisine tıklayınca düzenlemek için detay paneli açılır. ' +
       'Kartları sürükleyerek veya kart üzerindeki oklarla sırasını değiştirebilirsin.</p>' +
     '</section>';
@@ -1674,9 +1683,9 @@
     '</div>';
   }
 
+  /* Saat alanı kaldırıldı; geriye öğretmen ve açıklama kaldı. */
   const META_FIELDS = [
     { key: 'teacher', label: 'Öğretmen', add: 'Öğretmen Ekle', placeholder: 'Örn. Ahmet Yılmaz', area: false },
-    { key: 'time', label: 'Saat', add: 'Saat Ekle', placeholder: 'Örn. 09:30', area: false },
     { key: 'description', label: 'Açıklama', add: 'Açıklama Ekle', placeholder: 'Kısa bir açıklama', area: true }
   ];
 
@@ -1910,7 +1919,7 @@
         '<header class="drawer__head">' +
           '<div>' +
             '<p class="drawer__eyebrow">' + esc(DAY_BY_ID[found.dayId].label) + ' · ' +
-              esc(SLOTS[course.slot].label) + '</p>' +
+              esc(slotLabel(found.dayId, course.slot)) + '</p>' +
             '<h2 class="drawer__title">' + esc(course.name) + '</h2>' +
           '</div>' +
           '<button type="button" class="btn btn--ghost btn--sm drawer__close" data-action="close-drawer">' +
@@ -1997,9 +2006,6 @@
           '<div class="field"><label class="field__label">Öğretmen (isteğe bağlı)</label>' +
             '<input type="text" name="teacher" value="' + esc(course ? course.teacher : '') +
             '" placeholder="Örn. Ahmet Yılmaz"></div>' +
-          '<div class="field"><label class="field__label">Saat (isteğe bağlı)</label>' +
-            '<input type="text" name="time" value="' + esc(course ? course.time : '') +
-            '" placeholder="Örn. 09:30"></div>' +
         '</div>' +
         '<div class="field"><label class="field__label">Açıklama (isteğe bağlı)</label>' +
           '<textarea name="description" rows="2" placeholder="Bu dersle ilgili kısa bir not">' +
@@ -2217,7 +2223,6 @@
     const patch = {
       name: name,
       teacher: String(data.get('teacher') || '').trim(),
-      time: String(data.get('time') || '').trim(),
       description: String(data.get('description') || '').trim()
     };
 
