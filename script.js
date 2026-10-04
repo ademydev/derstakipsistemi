@@ -1867,6 +1867,27 @@
           'color: #9ca3af;' +
         '}' +
 
+        '@media print {' +
+          'body {' +
+          'padding: 0;' +
+          '-webkit-print-color-adjust: exact !important;' +
+          'print-color-adjust: exact !important;' +
+          '}' +
+
+        '.pdf {' +
+          'max-width: none;' +
+        '}' +
+
+        '.pdf-main-bar,' +
+        '.pdf-main-bar span,' +
+        '.pdf-course__bar,' +
+        '.pdf-course__bar span,' +
+        '.pdf-stat {' +
+          '-webkit-print-color-adjust: exact !important;' +
+          'print-color-adjust: exact !important;' +
+        '}' +
+      '}' +
+
 
       '</style>' +
     '</head>' +
