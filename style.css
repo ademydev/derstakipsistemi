@@ -275,6 +275,9 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
    gizlidir. .icon-btn'den SONRA yazılır ki aynı özgüllükteki display:grid
    (masaüstü kuralı) bu gizlemeyi ezmesin. */
 .sidebar-toggle { display: none; }
+.mobile-menu-toggle { display: none; }
+.mobile-nav-scrim { display: none; }
+.mobile-nav__settings, .mobile-nav__theme { display: none; }
 
 /* -------------------------- 4) SAYFA YAPISI ----------------------------- */
 /* Geniş ama kontrollü: içerik sıkıştırılmaz, kenarlarda makul pay bırakılır. */
@@ -1173,7 +1176,28 @@ input:-webkit-autofill:focus {
   :root { --shell-pad: 16px; }
   .main { padding: var(--s4) var(--shell-pad) 64px; }
   .topbar__inner { padding: 9px var(--shell-pad); gap: 10px; }
-  .nav { order: 3; width: 100%; margin-left: 0; }
+  .mobile-menu-toggle { display: grid; margin-left: auto; }
+  .nav {
+    position: fixed; z-index: 52; top: 0; right: 0; bottom: 0;
+    width: min(84vw, 330px); height: 100dvh; margin: 0; padding: 78px 14px 20px;
+    flex-direction: column; align-items: stretch; gap: 6px;
+    border: 0; border-left: 1px solid var(--border); border-radius: 0;
+    background: var(--surface); box-shadow: var(--shadow-lg);
+    overflow-y: auto; transform: translateX(105%); visibility: hidden;
+    transition: transform 220ms ease, visibility 220ms ease;
+  }
+  .nav__item { width: 100%; justify-content: flex-start; padding: 12px 14px; border-radius: var(--r-sm); }
+  .mobile-nav__settings, .mobile-nav__theme { display: inline-flex; margin-top: 4px; }
+  .mobile-nav__settings { border-top: 1px solid var(--border); padding-top: 18px; border-radius: 0; }
+  .topbar__foot { display: none; }
+  .mobile-nav-scrim {
+    display: block; position: fixed; z-index: 51; inset: 0;
+    background: rgba(8, 11, 20, .42); opacity: 0; visibility: hidden;
+    transition: opacity 220ms ease, visibility 220ms ease;
+  }
+  [data-mobile-nav="open"] .nav { transform: translateX(0); visibility: visible; }
+  [data-mobile-nav="open"] .mobile-nav-scrim { opacity: 1; visibility: visible; }
+  [data-mobile-nav="open"] .mobile-menu-toggle { position: relative; z-index: 54; color: var(--accent); }
   .theme-toggle { margin-left: auto; }
   h2 { font-size: 21px; }
   .page__head { align-items: flex-start; gap: var(--s3); margin-bottom: var(--s4); padding-bottom: var(--s3); }
@@ -1394,6 +1418,14 @@ input:-webkit-autofill:focus {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-xs);
+}
+
+/* Bugünün ders kartı ile ilerleme kartı kesin olarak ayrı yüzeylerdir. */
+.today-layout-stack {
+  display: block;
+  width: 100%;
+  margin-top: var(--s5);
+  clear: both;
 }
 
 .today-question-progress__head {

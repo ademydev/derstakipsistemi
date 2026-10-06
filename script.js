@@ -1408,8 +1408,8 @@
       '<div class="today-question-progress__actions">' +
           '<span class="today-question-progress__percent">%' + percent + '</span>' +
           '<button type="button" class="btn btn--soft btn--sm" data-action="export-today-progress-pdf">' +
-      ICONS.download + 'PDF İndir' +
-    '</button>' +
+            ICONS.download + 'PDF Yazdır' +
+          '</button>' +
   '</div>' +
     '</div>' +
 
@@ -1494,9 +1494,6 @@
             '" data-slot="school">' + ICONS.plus + 'Ders Ekle</button>' +
         '</div>' +
       '</div>' +
-      (total ? '' : '<div class="empty"><h3>Bugün için ders yok.</h3>' +
-        '<p>' + esc(DAY_BY_ID[dayId].label) + ' gününe ders eklemek için yukarıdaki butonu kullanabilirsin.</p></div>') +
-              renderTodayQuestionProgress(dayId) +
       /* Gün kartı ile "Yapılacaklar" paneli yan yana: geniş ekranı dengeli
          kullanır, panel tek kolonda tüm sayfayı gereğinden fazla kaplamaz. */
       '<div class="today-grid' + (pendingPanel ? '' : ' is-solo') + '">' +
@@ -1507,6 +1504,11 @@
            }) +
         ' </div>' +
         (pendingPanel ? '<div class="today-grid__side">' + pendingPanel + '</div>' : '') +
+      '</div>' +
+      '<div class="today-layout-stack">' +
+      renderTodayQuestionProgress(dayId) +
+      (total ? '' : '<div class="empty"><h3>Bugün için ders yok.</h3>' +
+        '<p>' + esc(DAY_BY_ID[dayId].label) + ' gününe ders eklemek için yukarıdaki butonu kullanabilirsin.</p></div>') +
       '</div>' +
     '</section>';
   }
@@ -2794,10 +2796,24 @@
     switch (action) {
       case 'set-view':
         ui.view = trigger.dataset.view;
+        document.documentElement.setAttribute('data-mobile-nav', 'closed');
         ui.drawer = null;
         ui.modal = null;
         closeForms();
         render();
+        break;
+
+      case 'toggle-mobile-nav': {
+        const open = document.documentElement.getAttribute('data-mobile-nav') !== 'open';
+        document.documentElement.setAttribute('data-mobile-nav', open ? 'open' : 'closed');
+        trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        trigger.setAttribute('aria-label', open ? 'Menüyü kapat' : 'Menüyü aç');
+        trigger.setAttribute('title', open ? 'Menüyü kapat' : 'Menüyü aç');
+        break;
+      }
+
+      case 'close-mobile-nav':
+        document.documentElement.setAttribute('data-mobile-nav', 'closed');
         break;
 
       case 'set-theme': {
@@ -3364,4 +3380,3 @@
 
 
 })();
-
