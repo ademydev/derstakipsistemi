@@ -299,15 +299,17 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 /* Odak sayacı */
 body.timer-active { overflow: hidden; }
 .timer-overlay { position: fixed; inset: 0; z-index: 100; width: 100vw; height: 100vh; height: 100dvh; display: grid; place-items: center; padding: clamp(14px, 3vw, 44px); overflow: hidden; background: var(--bg); }
-.timer-card { width: min(1180px, 100%); height: min(940px, 100%); min-height: 0; padding: clamp(28px, 5vw, 76px); border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface); box-shadow: var(--shadow-lg); text-align: center; display: flex; flex-direction: column; justify-content: space-between; }
-.timer-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0; }
+.timer-card { position: relative; width: min(1180px, 100%); height: min(940px, 100%); min-height: 0; padding: clamp(28px, 5vw, 76px); border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface); box-shadow: var(--shadow-lg); text-align: center; display: flex; flex-direction: column; justify-content: space-evenly; align-items: center; }
+.timer-card > * { width: 100%; }
+.timer-card > .timer-top { width: auto; }
+.timer-top { position: absolute; top: clamp(18px, 3vw, 36px); left: clamp(20px, 4vw, 52px); right: clamp(20px, 3vw, 36px); display: flex; align-items: center; justify-content: space-between; margin-bottom: 0; }
+.timer-tools { position: absolute; top: 0; right: 0; transform: translateX(-10px); display: flex; gap: 8px; }
 .timer-kicker { display: inline-flex; align-items: center; gap: 8px; color: var(--accent); font-size: var(--t-md); font-weight: 650; }
-.timer-tools { display: flex; gap: 8px; }
 .timer-tools .icon-btn { width: 36px; height: 36px; font-size: 16px; }
 .timer-tools .icon-btn:hover { color: var(--text-soft); border-color: var(--border); background: var(--surface-2); }
 .timer-tools .icon-btn:focus-visible { box-shadow: none; outline: 2px solid var(--accent-border); outline-offset: 2px; }
 .timer-card h2 { font-size: clamp(32px, 5vw, 58px); }
-.timer-hint { margin-top: 8px; color: var(--text-mute); }
+.timer-hint { display: none; }
 .timer-display { margin: 0; color: var(--text); font-size: clamp(96px, 19vw, 230px); line-height: 1; font-weight: 650; letter-spacing: -.055em; font-variant-numeric: tabular-nums; }
 .timer-inputs { display: flex; justify-content: center; align-items: end; gap: clamp(10px, 2vw, 26px); }
 .timer-inputs label { display: grid; gap: 6px; color: var(--text-mute); font-size: var(--t-sm); text-align: left; }

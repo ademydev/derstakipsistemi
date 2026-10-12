@@ -2667,11 +2667,11 @@
       '<div class="timer-card"><div class="timer-top"><span class="timer-kicker">' + ICONS.clock + ' Odak zamanı</span>' +
       '<div class="timer-tools"><button class="icon-btn" data-action="timer-minimize" aria-label="Küçült" title="Küçült">' + ICONS.minus + '</button>' +
       '<button class="icon-btn" data-action="timer-close" aria-label="Kapat" title="Kapat">' + ICONS.close + '</button></div></div>' +
-      '<h2>Geri sayım</h2><p class="timer-hint">Kendine bir süre belirle ve çalışmaya başla.</p>' +
+      '<h2>Geri sayım</h2>' +
       '<div class="timer-display" aria-live="polite">' + timerFormat(left) + '</div>' +
-      '<div class="timer-inputs"><label>Saat<input id="timer-hours" type="number" min="0" max="99" value="' + Math.floor(left / 3600) + '" ' + (timer.running ? 'disabled' : '') + '></label>' +
+      (timer.running ? '' : '<div class="timer-inputs"><label>Saat<input id="timer-hours" type="number" min="0" max="99" value="' + Math.floor(left / 3600) + '"></label>' +
       '<span>:</span><label>Dakika<input id="timer-minutes" type="number" min="0" max="59" value="' + (Math.floor(left / 60) % 60) + '" ' + (timer.running ? 'disabled' : '') + '></label>' +
-      '<span>:</span><label>Saniye<input id="timer-seconds" type="number" min="0" max="59" value="' + (left % 60) + '" ' + (timer.running ? 'disabled' : '') + '></label></div>' +
+      '<span>:</span><label>Saniye<input id="timer-seconds" type="number" min="0" max="59" value="' + (left % 60) + '"></label></div>') +
       '<div class="timer-controls"><button class="btn btn--primary" data-action="' + (timer.running ? 'timer-toggle' : 'timer-start') + '">' + (timer.running ? 'Duraklat' : (left ? 'Başlat' : 'Başlat')) + '</button>' +
       '<button class="btn" data-action="timer-reset">Sıfırla</button></div></div></section>';
   }
