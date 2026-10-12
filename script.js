@@ -2641,13 +2641,54 @@
     if (action === 'timer-minimize') { timerMinimize(); return; }
     if (action === 'timer-expand') { timerExpand(); return; }
     if (action === 'timer-close') { timerClose(); return; }
+    if (action === 'timer-alarm-stop') { timerStopAlarm(); timerPaint(); return; }
     const courseId = trigger.dataset.course || trigger.dataset.id || null;
     if (handleCourseAction(action, trigger, courseId)) return;
     handleAppAction(action, trigger, courseId);
   }
 
   /* ------------------------------- Sayaç -------------------------------- */
-  const timer = { open: false, minimized: false, running: false, remaining: 0, endAt: 0, interval: null };
+  const timer = { open: false, minimized: false, running: false, remaining: 0, endAt: 0, interval: null, alarmInterval: null, alarmStopAt: 0, audioContext: null };
+  function timerPlayFinishSound() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      if (!timer.audioContext) timer.audioContext = new AudioContext();
+      const context = timer.audioContext;
+      function playMelody() {
+        if (context.state === 'suspended') context.resume();
+        const notes = [659.25, 783.99, 987.77, 783.99];
+        notes.forEach(function (frequency, index) {
+          const startAt = context.currentTime + index * 0.19;
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(frequency, startAt);
+          gain.gain.setValueAtTime(0.0001, startAt);
+          gain.gain.exponentialRampToValueAtTime(0.16, startAt + 0.025);
+          gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.17);
+          oscillator.connect(gain);
+          gain.connect(context.destination);
+          oscillator.start(startAt);
+          oscillator.stop(startAt + 0.18);
+        });
+      }
+      timerStopAlarm();
+      timer.alarmStopAt = Date.now() + 30000;
+      playMelody();
+      timer.alarmInterval = window.setInterval(function () {
+        if (Date.now() >= timer.alarmStopAt) { timerStopAlarm(); timerPaint(); return; }
+        playMelody();
+      }, 1100);
+      timerPaint();
+    } catch (e) { /* Ses desteklenmiyorsa sayaç sessizce tamamlanır. */ }
+  }
+  function timerStopAlarm() {
+    if (timer.alarmInterval) window.clearInterval(timer.alarmInterval);
+    timer.alarmInterval = null;
+    timer.alarmStopAt = 0;
+    if (timer.audioContext && timer.audioContext.state === 'running') timer.audioContext.suspend();
+  }
   function timerFormat(seconds) {
     seconds = Math.max(0, Math.ceil(seconds));
     return String(Math.floor(seconds / 3600)).padStart(2, '0') + ':' + String(Math.floor(seconds / 60) % 60).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
@@ -2658,7 +2699,7 @@
     document.body.classList.add('timer-active');
     const left = timer.running ? Math.max(0, Math.ceil((timer.endAt - Date.now()) / 1000)) : timer.remaining;
     timer.remaining = left;
-    if (!left && timer.running) { timer.running = false; window.clearInterval(timer.interval); timer.interval = null; }
+    if (!left && timer.running) { timer.running = false; window.clearInterval(timer.interval); timer.interval = null; timerPlayFinishSound(); }
     if (timer.minimized) {
       root.innerHTML = '<button class="timer-float" data-action="timer-expand" aria-label="Sayacı büyüt">' + timerFormat(left) + '</button>';
       return;
@@ -2673,7 +2714,8 @@
       '<span>:</span><label>Dakika<input id="timer-minutes" type="number" min="0" max="59" value="' + (Math.floor(left / 60) % 60) + '" ' + (timer.running ? 'disabled' : '') + '></label>' +
       '<span>:</span><label>Saniye<input id="timer-seconds" type="number" min="0" max="59" value="' + (left % 60) + '"></label></div>') +
       '<div class="timer-controls"><button class="btn btn--primary" data-action="' + (timer.running ? 'timer-toggle' : 'timer-start') + '">' + (timer.running ? 'Duraklat' : (left ? 'Başlat' : 'Başlat')) + '</button>' +
-      '<button class="btn" data-action="timer-reset">Sıfırla</button></div></div></section>';
+      '<button class="btn" data-action="timer-reset">Sıfırla</button>' +
+      (timer.alarmInterval ? '<button class="btn btn--danger" data-action="timer-alarm-stop">Alarmı durdur</button>' : '') + '</div></div></section>';
   }
   function timerOpen() { timer.open = true; timer.minimized = false; timer.remaining = 0; timerPaint(); }
   function timerStart() {
@@ -2690,10 +2732,10 @@
     else { timer.running = true; timer.endAt = Date.now() + timer.remaining * 1000; timer.interval = window.setInterval(timerPaint, 250); }
     timerPaint();
   }
-  function timerReset() { timer.running = false; window.clearInterval(timer.interval); timer.interval = null; timer.remaining = 0; timerPaint(); }
+  function timerReset() { timer.running = false; window.clearInterval(timer.interval); timer.interval = null; timerStopAlarm(); timer.remaining = 0; timerPaint(); }
   function timerMinimize() { timer.minimized = true; timerPaint(); }
   function timerExpand() { timer.minimized = false; timerPaint(); }
-  function timerClose() { timer.running = false; window.clearInterval(timer.interval); timer.interval = null; timer.open = false; timerPaint(); }
+  function timerClose() { timer.running = false; window.clearInterval(timer.interval); timer.interval = null; timerStopAlarm(); timer.open = false; timerPaint(); }
 
   /* Ders kartı ve detay çekmecesi işlemleri */
   function handleCourseAction(action, trigger, courseId) {
