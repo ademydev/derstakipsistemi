@@ -296,6 +296,29 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .page__sub { font-size: var(--t-md); color: var(--text-mute); margin-top: 5px; }
 .page__actions { display: flex; gap: var(--s2); flex-wrap: wrap; flex: none; }
 
+/* Odak sayacı */
+body.timer-active { overflow: hidden; }
+.timer-overlay { position: fixed; inset: 0; z-index: 100; width: 100vw; height: 100vh; height: 100dvh; display: grid; place-items: center; padding: clamp(14px, 3vw, 44px); overflow: hidden; background: var(--bg); }
+.timer-card { width: min(1180px, 100%); height: min(940px, 100%); min-height: 0; padding: clamp(28px, 5vw, 76px); border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface); box-shadow: var(--shadow-lg); text-align: center; display: flex; flex-direction: column; justify-content: space-between; }
+.timer-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0; }
+.timer-kicker { display: inline-flex; align-items: center; gap: 8px; color: var(--accent); font-size: var(--t-md); font-weight: 650; }
+.timer-tools { display: flex; gap: 8px; }
+.timer-tools .icon-btn { width: 36px; height: 36px; font-size: 16px; }
+.timer-tools .icon-btn:hover { color: var(--text-soft); border-color: var(--border); background: var(--surface-2); }
+.timer-tools .icon-btn:focus-visible { box-shadow: none; outline: 2px solid var(--accent-border); outline-offset: 2px; }
+.timer-card h2 { font-size: clamp(32px, 5vw, 58px); }
+.timer-hint { margin-top: 8px; color: var(--text-mute); }
+.timer-display { margin: 0; color: var(--text); font-size: clamp(96px, 19vw, 230px); line-height: 1; font-weight: 650; letter-spacing: -.055em; font-variant-numeric: tabular-nums; }
+.timer-inputs { display: flex; justify-content: center; align-items: end; gap: clamp(10px, 2vw, 26px); }
+.timer-inputs label { display: grid; gap: 6px; color: var(--text-mute); font-size: var(--t-sm); text-align: left; }
+.timer-inputs input { width: clamp(86px, 10vw, 150px); height: clamp(46px, 5vw, 68px); border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface-2); text-align: center; font-size: clamp(16px, 2vw, 24px); font-variant-numeric: tabular-nums; }
+.timer-inputs > span { padding-bottom: 10px; color: var(--text-mute); font-size: 22px; }
+.timer-controls { display: flex; justify-content: center; gap: 12px; margin-top: 0; }
+.timer-float { position: fixed; z-index: 100; right: max(22px, env(safe-area-inset-right)); bottom: max(22px, env(safe-area-inset-bottom)); min-width: 106px; min-height: 54px; padding: 0 18px; border: 1px solid var(--accent-border); border-radius: var(--r-full); background: var(--surface); color: var(--accent); box-shadow: var(--shadow-lg); font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.timer-float:hover { background: var(--accent-soft); }
+@media (max-width: 560px) { .timer-overlay { padding: 10px; } .timer-card { width: 100%; height: calc(100dvh - 20px); padding: 22px 14px; } .timer-display { font-size: clamp(54px, 15vw, 90px); letter-spacing: -.065em; } .timer-inputs { gap: 7px; } .timer-inputs input { width: clamp(70px, 23vw, 100px); } .timer-kicker { font-size: var(--t-sm); } .timer-tools .icon-btn { width: 34px; height: 34px; } }
+@media (max-height: 640px) { .timer-card { padding-block: 16px; } .timer-card h2 { font-size: 28px; } .timer-hint { display: none; } .timer-display { font-size: clamp(64px, 18vh, 130px); } }
+
 /* ---------------------------- 5) BUTONLAR ------------------------------- */
 /* Hiyerarşi net: primary (dolu indigo) > secondary (nötr yüzey) >
    danger (kırmızı). Ghost yardımcı/ikincil eylemler için. */

@@ -1490,6 +1490,7 @@
             (total ? total + ' ders' : 'henüz ders eklenmedi') + '</p>' +
         '</div>' +
         '<div class="page__actions">' +
+          '<button type="button" class="btn" data-action="timer-open">' + ICONS.clock + 'Sayaç</button>' +
           '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' + esc(dayId) +
             '" data-slot="school">' + ICONS.plus + 'Ders Ekle</button>' +
         '</div>' +
@@ -2633,10 +2634,66 @@
     const trigger = event.target.closest ? event.target.closest('[data-action]') : null;
     if (!trigger) return;
     const action = trigger.dataset.action;
+    if (action === 'timer-open') { timerOpen(); return; }
+    if (action === 'timer-start') { timerStart(); return; }
+    if (action === 'timer-toggle') { timerToggle(); return; }
+    if (action === 'timer-reset') { timerReset(); return; }
+    if (action === 'timer-minimize') { timerMinimize(); return; }
+    if (action === 'timer-expand') { timerExpand(); return; }
+    if (action === 'timer-close') { timerClose(); return; }
     const courseId = trigger.dataset.course || trigger.dataset.id || null;
     if (handleCourseAction(action, trigger, courseId)) return;
     handleAppAction(action, trigger, courseId);
   }
+
+  /* ------------------------------- Sayaç -------------------------------- */
+  const timer = { open: false, minimized: false, running: false, remaining: 0, endAt: 0, interval: null };
+  function timerFormat(seconds) {
+    seconds = Math.max(0, Math.ceil(seconds));
+    return String(Math.floor(seconds / 3600)).padStart(2, '0') + ':' + String(Math.floor(seconds / 60) % 60).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+  }
+  function timerPaint() {
+    const root = $('#timer-root');
+    if (!root || !timer.open) { if (root) root.innerHTML = ''; document.body.classList.remove('timer-active'); return; }
+    document.body.classList.add('timer-active');
+    const left = timer.running ? Math.max(0, Math.ceil((timer.endAt - Date.now()) / 1000)) : timer.remaining;
+    timer.remaining = left;
+    if (!left && timer.running) { timer.running = false; window.clearInterval(timer.interval); timer.interval = null; }
+    if (timer.minimized) {
+      root.innerHTML = '<button class="timer-float" data-action="timer-expand" aria-label="Sayacı büyüt">' + timerFormat(left) + '</button>';
+      return;
+    }
+    root.innerHTML = '<section class="timer-overlay" role="dialog" aria-modal="true" aria-label="Sayaç">' +
+      '<div class="timer-card"><div class="timer-top"><span class="timer-kicker">' + ICONS.clock + ' Odak zamanı</span>' +
+      '<div class="timer-tools"><button class="icon-btn" data-action="timer-minimize" aria-label="Küçült" title="Küçült">' + ICONS.minus + '</button>' +
+      '<button class="icon-btn" data-action="timer-close" aria-label="Kapat" title="Kapat">' + ICONS.close + '</button></div></div>' +
+      '<h2>Geri sayım</h2><p class="timer-hint">Kendine bir süre belirle ve çalışmaya başla.</p>' +
+      '<div class="timer-display" aria-live="polite">' + timerFormat(left) + '</div>' +
+      '<div class="timer-inputs"><label>Saat<input id="timer-hours" type="number" min="0" max="99" value="' + Math.floor(left / 3600) + '" ' + (timer.running ? 'disabled' : '') + '></label>' +
+      '<span>:</span><label>Dakika<input id="timer-minutes" type="number" min="0" max="59" value="' + (Math.floor(left / 60) % 60) + '" ' + (timer.running ? 'disabled' : '') + '></label>' +
+      '<span>:</span><label>Saniye<input id="timer-seconds" type="number" min="0" max="59" value="' + (left % 60) + '" ' + (timer.running ? 'disabled' : '') + '></label></div>' +
+      '<div class="timer-controls"><button class="btn btn--primary" data-action="' + (timer.running ? 'timer-toggle' : 'timer-start') + '">' + (timer.running ? 'Duraklat' : (left ? 'Başlat' : 'Başlat')) + '</button>' +
+      '<button class="btn" data-action="timer-reset">Sıfırla</button></div></div></section>';
+  }
+  function timerOpen() { timer.open = true; timer.minimized = false; timer.remaining = 0; timerPaint(); }
+  function timerStart() {
+    const hours = clamp(intOr($('#timer-hours') && $('#timer-hours').value, 0), 0, 99);
+    const mins = clamp(intOr($('#timer-minutes') && $('#timer-minutes').value, 0), 0, 59);
+    const secs = clamp(intOr($('#timer-seconds') && $('#timer-seconds').value, 0), 0, 59);
+    timer.remaining = hours * 3600 + mins * 60 + secs;
+    if (!timer.remaining) return;
+    timer.running = true; timer.endAt = Date.now() + timer.remaining * 1000;
+    timer.interval = window.setInterval(timerPaint, 250); timerPaint();
+  }
+  function timerToggle() {
+    if (timer.running) { timer.remaining = Math.max(0, Math.ceil((timer.endAt - Date.now()) / 1000)); timer.running = false; window.clearInterval(timer.interval); timer.interval = null; }
+    else { timer.running = true; timer.endAt = Date.now() + timer.remaining * 1000; timer.interval = window.setInterval(timerPaint, 250); }
+    timerPaint();
+  }
+  function timerReset() { timer.running = false; window.clearInterval(timer.interval); timer.interval = null; timer.remaining = 0; timerPaint(); }
+  function timerMinimize() { timer.minimized = true; timerPaint(); }
+  function timerExpand() { timer.minimized = false; timerPaint(); }
+  function timerClose() { timer.running = false; window.clearInterval(timer.interval); timer.interval = null; timer.open = false; timerPaint(); }
 
   /* Ders kartı ve detay çekmecesi işlemleri */
   function handleCourseAction(action, trigger, courseId) {
