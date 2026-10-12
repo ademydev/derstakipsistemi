@@ -2648,44 +2648,59 @@
   }
 
   /* ------------------------------- Sayaç -------------------------------- */
-  const timer = { open: false, minimized: false, running: false, remaining: 0, endAt: 0, interval: null, alarmInterval: null, alarmStopAt: 0, audioContext: null };
+  const timer = { open: false, minimized: false, running: false, remaining: 0, endAt: 0, interval: null, alarmInterval: null, alarmActive: false, alarmStopAt: 0, audioContext: null };
+  function timerPrepareAudio() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      if (!timer.audioContext) timer.audioContext = new AudioContext();
+      if (timer.audioContext.state === 'suspended') timer.audioContext.resume().catch(function () {});
+    } catch (e) { /* Ses desteklenmiyorsa sayaç çalışmaya devam eder. */ }
+  }
   function timerPlayFinishSound() {
+    timerStopAlarm();
+    timer.alarmActive = true;
+    timer.alarmStopAt = Date.now() + 30000;
+    let playMelody = function () {};
+    timer.alarmInterval = window.setInterval(function () {
+      if (Date.now() >= timer.alarmStopAt) { timerStopAlarm(); timerPaint(); return; }
+      playMelody();
+    }, 1100);
+    timerPaint();
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (!AudioContext) return;
       if (!timer.audioContext) timer.audioContext = new AudioContext();
       const context = timer.audioContext;
-      function playMelody() {
-        if (context.state === 'suspended') context.resume();
-        const notes = [659.25, 783.99, 987.77, 783.99];
-        notes.forEach(function (frequency, index) {
-          const startAt = context.currentTime + index * 0.19;
-          const oscillator = context.createOscillator();
-          const gain = context.createGain();
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(frequency, startAt);
-          gain.gain.setValueAtTime(0.0001, startAt);
-          gain.gain.exponentialRampToValueAtTime(0.16, startAt + 0.025);
-          gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.17);
-          oscillator.connect(gain);
-          gain.connect(context.destination);
-          oscillator.start(startAt);
-          oscillator.stop(startAt + 0.18);
-        });
-      }
-      timerStopAlarm();
-      timer.alarmStopAt = Date.now() + 30000;
+      playMelody = function () {
+        const play = function () {
+          if (!timer.alarmActive) return;
+          const notes = [659.25, 783.99, 987.77, 783.99];
+          notes.forEach(function (frequency, index) {
+            const startAt = context.currentTime + index * 0.19;
+            const oscillator = context.createOscillator();
+            const gain = context.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, startAt);
+            gain.gain.setValueAtTime(0.0001, startAt);
+            gain.gain.exponentialRampToValueAtTime(0.16, startAt + 0.025);
+            gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.17);
+            oscillator.connect(gain);
+            gain.connect(context.destination);
+            oscillator.start(startAt);
+            oscillator.stop(startAt + 0.18);
+          });
+        };
+        if (context.state === 'suspended') context.resume().then(play).catch(function () {});
+        else play();
+      };
       playMelody();
-      timer.alarmInterval = window.setInterval(function () {
-        if (Date.now() >= timer.alarmStopAt) { timerStopAlarm(); timerPaint(); return; }
-        playMelody();
-      }, 1100);
-      timerPaint();
     } catch (e) { /* Ses desteklenmiyorsa sayaç sessizce tamamlanır. */ }
   }
   function timerStopAlarm() {
     if (timer.alarmInterval) window.clearInterval(timer.alarmInterval);
     timer.alarmInterval = null;
+    timer.alarmActive = false;
     timer.alarmStopAt = 0;
     if (timer.audioContext && timer.audioContext.state === 'running') timer.audioContext.suspend();
   }
@@ -2701,7 +2716,8 @@
     timer.remaining = left;
     if (!left && timer.running) { timer.running = false; window.clearInterval(timer.interval); timer.interval = null; timerPlayFinishSound(); }
     if (timer.minimized) {
-      root.innerHTML = '<button class="timer-float" data-action="timer-expand" aria-label="Sayacı büyüt">' + timerFormat(left) + '</button>';
+      root.innerHTML = '<div class="timer-float-wrap"><button class="timer-float" data-action="timer-expand" aria-label="Sayacı büyüt">' + timerFormat(left) + '</button>' +
+        (timer.alarmActive ? '<button class="timer-float-stop" data-action="timer-alarm-stop">Alarmı durdur</button>' : '') + '</div>';
       return;
     }
     root.innerHTML = '<section class="timer-overlay" role="dialog" aria-modal="true" aria-label="Sayaç">' +
@@ -2715,7 +2731,7 @@
       '<span>:</span><label>Saniye<input id="timer-seconds" type="number" min="0" max="59" value="' + (left % 60) + '"></label></div>') +
       '<div class="timer-controls"><button class="btn btn--primary" data-action="' + (timer.running ? 'timer-toggle' : 'timer-start') + '">' + (timer.running ? 'Duraklat' : (left ? 'Başlat' : 'Başlat')) + '</button>' +
       '<button class="btn" data-action="timer-reset">Sıfırla</button>' +
-      (timer.alarmInterval ? '<button class="btn btn--danger" data-action="timer-alarm-stop">Alarmı durdur</button>' : '') + '</div></div></section>';
+      (timer.alarmActive ? '<button class="btn btn--danger" data-action="timer-alarm-stop">Alarmı durdur</button>' : '') + '</div></div></section>';
   }
   function timerOpen() { timer.open = true; timer.minimized = false; timer.remaining = 0; timerPaint(); }
   function timerStart() {
@@ -2724,6 +2740,7 @@
     const secs = clamp(intOr($('#timer-seconds') && $('#timer-seconds').value, 0), 0, 59);
     timer.remaining = hours * 3600 + mins * 60 + secs;
     if (!timer.remaining) return;
+    timerPrepareAudio();
     timer.running = true; timer.endAt = Date.now() + timer.remaining * 1000;
     timer.interval = window.setInterval(timerPaint, 250); timerPaint();
   }
