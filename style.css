@@ -783,7 +783,10 @@ body.is-dragging .slot__empty.drop-target {
 }
 .drawer--context .drawer__head { padding: 13px 16px 11px; }
 .drawer--context .drawer__title { font-size: var(--t-lg); }
-.drawer--context .drawer__body { padding: 12px 16px; gap: 12px; }
+.drawer--context .drawer__body {
+  max-height: calc(100dvh - 160px); padding: 12px 16px; gap: 12px;
+  overflow-y: auto; overscroll-behavior: contain;
+}
 .drawer__quick:empty { display: none; }
 .drawer__quick .section { gap: 0; }
 .drawer__quick .quickadd { display: flex; flex-wrap: wrap; gap: 7px; }

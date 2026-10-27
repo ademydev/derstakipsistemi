@@ -2689,8 +2689,21 @@
 
   function onContextDrawerOutsideClick(event) {
     if (!ui.drawerContext) return;
+    /* İç düğmeye basmak render() ile paneli yenilese bile tıklama içerden gelmiştir. */
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    if (path.some(function (node) {
+      return node && node.matches && node.matches('.drawer--context .drawer__panel');
+    })) return;
+    if (event.target.closest && event.target.closest('.drawer--context .drawer__panel')) return;
     const panel = document.querySelector('.drawer--context .drawer__panel');
     if (panel && !panel.contains(event.target)) dismissContextDrawer();
+  }
+
+  function onContextDrawerScroll(event) {
+    if (!ui.drawerContext) return;
+    const panel = document.querySelector('.drawer--context .drawer__panel');
+    if (panel && panel.contains(event.target)) return;
+    dismissContextDrawer();
   }
 
   /* ------------------------------- Sayaç -------------------------------- */
@@ -3448,7 +3461,7 @@
     document.addEventListener('click', onClick);
     document.addEventListener('click', onContextDrawerOutsideClick);
     document.addEventListener('contextmenu', onCourseContextMenu);
-    document.addEventListener('scroll', dismissContextDrawer, true);
+    document.addEventListener('scroll', onContextDrawerScroll, true);
     document.addEventListener('submit', onSubmit);
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('dragstart', onDragStart);
