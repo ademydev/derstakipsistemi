@@ -2711,7 +2711,7 @@
     timer.alarmInterval = window.setInterval(function () {
       if (Date.now() >= timer.alarmStopAt) { timerStopAlarm(); timerPaint(); return; }
       playMelody();
-    }, 1100);
+    }, 1350);
     timerPaint();
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -2721,20 +2721,25 @@
       playMelody = function () {
         const play = function () {
           if (!timer.alarmActive) return;
-          const notes = [659.25, 783.99, 987.77, 783.99];
+          /* Yumuşak, kısa üç notalı zil: keskin bip yerine azalan çan tınısı. */
+          const notes = [659.25, 783.99, 987.77];
           notes.forEach(function (frequency, index) {
-            const startAt = context.currentTime + index * 0.19;
-            const oscillator = context.createOscillator();
-            const gain = context.createGain();
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(frequency, startAt);
-            gain.gain.setValueAtTime(0.0001, startAt);
-            gain.gain.exponentialRampToValueAtTime(0.16, startAt + 0.025);
-            gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.17);
-            oscillator.connect(gain);
-            gain.connect(context.destination);
-            oscillator.start(startAt);
-            oscillator.stop(startAt + 0.18);
+            const startAt = context.currentTime + index * 0.24;
+            [1, 2].forEach(function (partial, partialIndex) {
+              const oscillator = context.createOscillator();
+              const gain = context.createGain();
+              const peak = partialIndex ? 0.06 : 0.22;
+              const duration = partialIndex ? 0.42 : 0.62;
+              oscillator.type = 'sine';
+              oscillator.frequency.setValueAtTime(frequency * partial, startAt);
+              gain.gain.setValueAtTime(0.0001, startAt);
+              gain.gain.exponentialRampToValueAtTime(peak, startAt + 0.025);
+              gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+              oscillator.connect(gain);
+              gain.connect(context.destination);
+              oscillator.start(startAt);
+              oscillator.stop(startAt + duration + 0.02);
+            });
           });
         };
         if (context.state === 'suspended') context.resume().then(play).catch(function () {});
