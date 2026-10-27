@@ -2757,7 +2757,7 @@
   function timerPaint() {
     const root = $('#timer-root');
     if (!root || !timer.open) { if (root) root.innerHTML = ''; document.body.classList.remove('timer-active'); return; }
-    document.body.classList.add('timer-active');
+    document.body.classList.toggle('timer-active', !timer.minimized);
     const left = timer.running ? Math.max(0, Math.ceil((timer.endAt - Date.now()) / 1000)) : timer.remaining;
     timer.remaining = left;
     if (!left && timer.running) { timer.running = false; window.clearInterval(timer.interval); timer.interval = null; timerPlayFinishSound(); }
@@ -2787,6 +2787,8 @@
     timer.remaining = hours * 3600 + mins * 60 + secs;
     if (!timer.remaining) return;
     timerPrepareAudio();
+    /* Sayaç başlayınca tam ekranı bırakır; küçük sayaç sayfayı kullanmaya izin verir. */
+    timer.minimized = true;
     timer.running = true; timer.endAt = Date.now() + timer.remaining * 1000;
     timer.interval = window.setInterval(timerPaint, 250); timerPaint();
   }
