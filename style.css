@@ -61,6 +61,7 @@
   --warn-soft: #fdf3e3;
   --warn-border: #f0dcb6;
   --morning: #c2740a;
+  --noon: #087e8b;
   --evening: #7c3aed;
   --violet: #7c3aed;
   --danger: #d92d20;
@@ -116,6 +117,7 @@
   --warn-soft: rgba(240, 181, 74, 0.14);
   --warn-border: rgba(240, 181, 74, 0.30);
   --morning: #f0b54a;
+  --noon: #65d3df;
   --evening: #a78bfa;
   --violet: #a78bfa;
   --danger: #ff8177;
@@ -477,6 +479,20 @@ body.timer-active { overflow: hidden; }
   font-size: var(--t-xs); font-weight: 700; color: var(--text-soft);
   background: var(--surface-3); padding: 2px 7px; border-radius: var(--r-full);
 }
+.day__periods {
+  display: flex; flex: 1 0 100%; flex-wrap: wrap; align-items: center;
+  gap: 4px; min-width: 0;
+}
+.period-toggle {
+  min-height: 22px; padding: 2px 6px; border: 1px solid var(--border);
+  border-radius: var(--r-full); background: var(--surface-2); color: var(--text-mute);
+  font-size: 9px; font-weight: 650; line-height: 1.2; white-space: nowrap;
+  transition: color .14s, background .14s, border-color .14s;
+}
+.period-toggle:hover { color: var(--accent); border-color: var(--accent-border); }
+.period-toggle.is-active {
+  color: var(--accent); background: var(--accent-soft); border-color: var(--accent-border);
+}
 .day__body { display: flex; flex-direction: column; gap: 10px; padding: 11px var(--pad-day) 13px; flex: 1; }
 .day__body--empty { gap: 9px; padding-top: 14px; padding-bottom: 14px; }
 .day__empty { font-size: var(--t-sm); color: var(--text-mute); }
@@ -493,6 +509,7 @@ body.timer-active { overflow: hidden; }
 .quick-add .icon { width: 13px; height: 13px; }
 .quick-add:hover { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
 .quick-add--morning:hover { color: var(--morning); border-color: var(--morning); }
+.quick-add--noon:hover { color: var(--noon); border-color: var(--noon); }
 .quick-add--evening:hover { color: var(--evening); border-color: var(--evening); }
 
 /* Bölüm grupları (Sabah / Okul / Akşam) */
@@ -502,6 +519,7 @@ body.timer-active { overflow: hidden; }
 .slot__icon .icon { width: 15px; height: 15px; }
 .slot__icon--morning { color: var(--morning); }
 .slot__icon--school { color: var(--accent); }
+.slot__icon--noon { color: var(--noon); }
 .slot__icon--evening { color: var(--evening); }
 .slot__title {
   font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.085em;
@@ -554,6 +572,7 @@ body.is-dragging .slot__empty.drop-target {
 }
 .course[data-slot="morning"]::before { background: var(--morning); }
 .course[data-slot="school"]::before { background: var(--accent); }
+.course[data-slot="noon"]::before { background: var(--noon); }
 .course[data-slot="evening"]::before { background: var(--evening); }
 .course.is-dragging { opacity: 0.4; }
 .course.drop-target { border-color: var(--accent); box-shadow: var(--ring); }

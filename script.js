@@ -30,9 +30,22 @@
   const SLOTS = {
     morning: { id: 'morning', label: 'Sabah' },
     school: { id: 'school', label: 'Okul' },
+    noon: { id: 'noon', label: 'Öğle' },
     evening: { id: 'evening', label: 'Akşam' }
   };
-  const SLOT_IDS = ['morning', 'school', 'evening'];
+  const SLOT_IDS = ['morning', 'school', 'noon', 'evening'];
+  const WEEKEND_DAY_IDS = ['saturday', 'sunday'];
+
+  function isWeekendDay(dayId) {
+    return WEEKEND_DAY_IDS.indexOf(dayId) >= 0;
+  }
+  function defaultDayPeriods(dayId) {
+    const weekend = isWeekendDay(dayId);
+    return { morning: true, school: !weekend, noon: weekend, evening: true };
+  }
+  function defaultPlannerSlot(dayId) {
+    return isWeekendDay(dayId) ? 'noon' : 'school';
+  }
 
   /* Dersin içindeki listeler: hangisi boşsa arayüzde hiç görünmez. */
   const LISTS = {
@@ -399,7 +412,7 @@
     }
 
     course = {
-      id, name, slot: 'morning' | 'school' | 'evening',
+      id, name, slot: 'morning' | 'school' | 'noon' | 'evening',
       teacher: '', description: '',
       topics: [{ id, text, done }],
       goals: [{ id, text, target, done, daily, doneOn }],
@@ -415,7 +428,9 @@
   */
   function emptyState() {
     const days = {};
-    DAYS.forEach(function (d) { days[d.id] = { id: d.id, courses: [] }; });
+    DAYS.forEach(function (d) {
+      days[d.id] = { id: d.id, courses: [], periods: defaultDayPeriods(d.id) };
+    });
     return { version: 1, settings: { theme: 'system', sidebar: 'expanded' }, updatedAt: nowISO(), days: days };
   }
 
@@ -435,14 +450,16 @@
     return out;
   }
 
-  function normalizeCourse(raw) {
+  function normalizeCourse(raw, dayId) {
     if (!isPlainObject(raw)) return null;
     const name = String(raw.name || '').trim();
     if (!name) return null;
+    /* Eski hafta sonu `school` kartları zaten Öğle olarak gösteriliyordu. */
+    const rawSlot = raw.slot === 'school' && isWeekendDay(dayId) ? 'noon' : raw.slot;
     const course = {
       id: typeof raw.id === 'string' && raw.id ? raw.id : uid('c'),
       name: name,
-      slot: SLOT_IDS.indexOf(raw.slot) >= 0 ? raw.slot : 'school',
+      slot: SLOT_IDS.indexOf(rawSlot) >= 0 ? rawSlot : 'school',
       teacher: String(raw.teacher || ''),
       description: String(raw.description || ''),
       createdAt: raw.createdAt || nowISO(),
@@ -469,7 +486,20 @@
     DAYS.forEach(function (day) {
       const src = isPlainObject(raw.days) ? raw.days[day.id] : null;
       const courses = src && Array.isArray(src.courses) ? src.courses : [];
-      out.days[day.id].courses = courses.map(normalizeCourse).filter(Boolean);
+      const defaults = defaultDayPeriods(day.id);
+      const savedPeriods = src && isPlainObject(src.periods) ? src.periods : null;
+      Object.keys(defaults).forEach(function (slotId) {
+        out.days[day.id].periods[slotId] = savedPeriods && typeof savedPeriods[slotId] === 'boolean'
+          ? savedPeriods[slotId] : defaults[slotId];
+      });
+      /* Hafta içi okul ve kişisel öğle çalışması aynı anda görünemez.
+         Eski/çakışan ayarlarda okul tercihini koru. */
+      if (!isWeekendDay(day.id) && out.days[day.id].periods.school && out.days[day.id].periods.noon) {
+        out.days[day.id].periods.noon = false;
+      }
+      out.days[day.id].courses = courses.map(function (course) {
+        return normalizeCourse(course, day.id);
+      }).filter(Boolean);
     });
     out.updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : nowISO();
     return out;
@@ -1006,34 +1036,25 @@
   }
 
   /* ---------------------------- Ortak parçalar --------------------------- */
-  /* Bölüm (Sabah / Okul / Akşam) görsel kimliği: ikon + etiket + ipucu. */
+  /* Gün bölümleri ayrı tutulur: kişisel Öğle çalışması, okul programı değildir. */
   const SLOT_UI = {
     morning: { label: 'Sabah', icon: ICONS.sun, hint: 'Sabah çalışması' },
     school: { label: 'Okul', icon: ICONS.school, hint: 'Okul dersi' },
+    noon: { label: 'Öğle', icon: ICONS.clock, hint: 'Öğle çalışması' },
     evening: { label: 'Akşam', icon: ICONS.moon, hint: 'Akşam çalışması' }
   };
 
-  /* Cumartesi ve Pazar'da okul yoktur; o iki günde "Okul" bölümünün adı
-     "Öğle" görünür (ders kartı düzeni bu günlerde alt alta sıralanır).
-
-     YALNIZCA EKRAN ADI değişir — bölüm kimliği 'school' olarak kalır. Kayıtlı
-     dersler, localStorage/Supabase verisi, sayaçlar ve tüm mantık aynen çalışır;
-     hafta içi hiçbir yerde "Öğle" yazmaz. */
-  const WEEKEND_DAY_IDS = ['saturday', 'sunday'];
-  function isWeekendDay(dayId) {
-    return WEEKEND_DAY_IDS.indexOf(dayId) >= 0;
-  }
-  /* Bölümün o güne göre görünen adı ("Okul" / hafta sonunda "Öğle"). */
+  /* Bölümün o güne göre görünen adı. */
   function slotLabel(dayId, slotId) {
     const meta = SLOT_UI[slotId];
     if (!meta) return '';
-    return slotId === 'school' && isWeekendDay(dayId) ? 'Öğle' : meta.label;
+    return meta.label;
   }
   /* Bölümün kısa metni: "+" düğmesinin ipucu ve boş-bırakma alanı yazısı. */
   function slotHint(dayId, slotId) {
     const meta = SLOT_UI[slotId];
     if (!meta) return '';
-    return slotId === 'school' && isWeekendDay(dayId) ? 'Öğle' : meta.hint;
+    return meta.hint;
   }
 
   /* Bölüm başlığındaki küçük "+": doğrudan o günün o bölümüne ekler.
@@ -1272,9 +1293,27 @@
     }).join('');
   }
 
+  function renderPeriodToggles(dayId, slotIds) {
+    const periods = state.days[dayId].periods || defaultDayPeriods(dayId);
+    return '<div class="day__periods" aria-label="' + esc(DAY_BY_ID[dayId].label) + ' zaman dilimleri">' +
+      slotIds.map(function (slotId) {
+        const active = periods[slotId] !== false;
+        const label = SLOT_UI[slotId].label;
+        return '<button type="button" class="period-toggle' + (active ? ' is-active' : '') +
+          '" data-action="toggle-period" data-day="' + esc(dayId) + '" data-slot="' + esc(slotId) +
+          '" aria-pressed="' + active + '" title="' + esc((active ? 'Kapat: ' : 'Aç: ') + label) + '">' +
+          esc(label) + '</button>';
+      }).join('') +
+    '</div>';
+  }
+
   function renderDay(dayId, options) {
-    const opts = Object.assign({ slots: SLOT_IDS, highlightToday: false, emptyQuickAdd: true }, options || {});
-    const slots = opts.slots === 'present' ? slotsWithContent(dayId) : opts.slots;
+    const opts = Object.assign({ slots: SLOT_IDS, highlightToday: false, emptyQuickAdd: true, periodControls: false }, options || {});
+    let slots = opts.slots === 'present' ? slotsWithContent(dayId) : opts.slots.slice();
+    if (opts.periodControls) {
+      const periods = state.days[dayId].periods || defaultDayPeriods(dayId);
+      slots = slots.filter(function (slotId) { return periods[slotId] !== false; });
+    }
     const total = slots.reduce(function (sum, slotId) { return sum + coursesOf(dayId, slotId).length; }, 0);
     const isToday = !!opts.highlightToday;
 
@@ -1285,10 +1324,9 @@
       }).join('') + '</div>';
     } else {
       /* Boş gün: büyük boşluk yerine sade bir empty state + hızlı ekleme. */
-      const hasStudy = slots.indexOf('morning') >= 0 && slots.indexOf('evening') >= 0;
-      const quickSlots = hasStudy ? ['morning', 'evening'] : slots;
+      const quickSlots = slots;
       body = '<div class="day__body day__body--empty">' +
-        '<p class="day__empty">' + esc(opts.emptyText || 'Henüz çalışma planı yok') + '</p>' +
+        '<p class="day__empty">' + esc(opts.emptyText || (slots.length ? 'Henüz çalışma planı yok' : 'Tüm zaman dilimleri kapalı')) + '</p>' +
         (opts.emptyQuickAdd
           ? '<div class="day__quick">' + quickSlots.map(function (slotId) {
               return quickAddButton(dayId, slotId);
@@ -1307,6 +1345,10 @@
           (isToday ? '<span class="day__badge">Bugün</span>' : '') +
           (total ? '<span class="day__count">' + total + '</span>' : '') +
         '</div>' +
+        (opts.periodControls ? renderPeriodToggles(dayId,
+          (opts.periodSlots || opts.slots).filter(function (slotId) {
+            return !(isWeekendDay(dayId) && slotId === 'school');
+          })) : '') +
       '</header>' +
       body +
     '</article>';
@@ -1319,7 +1361,7 @@
       '<p>Program tamamen boş. Hazır ders listesi yok: yalnızca senin eklediğin dersler görünür. ' +
       'İstediğin güne istediğin kadar ders ekleyebilir, her dersi konu, soru hedefi, ödev ve notlarla detaylandırabilirsin.</p>' +
       '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' +
-        esc(todayDayId()) + '" data-slot="school">' + ICONS.plus + 'İlk Dersi Ekle</button>' +
+        esc(todayDayId()) + '" data-slot="' + defaultPlannerSlot(todayDayId()) + '">' + ICONS.plus + 'İlk Dersi Ekle</button>' +
     '</div>';
   }
 
@@ -1353,13 +1395,13 @@
         '<div class="page__actions">' +
           '<button type="button" class="btn" data-action="export-json">' + ICONS.download + 'Dışa Aktar</button>' +
           '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' + esc(todayId) +
-            '" data-slot="school">' + ICONS.plus + 'Ders Ekle</button>' +
+            '" data-slot="' + defaultPlannerSlot(todayId) + '">' + ICONS.plus + 'Ders Ekle</button>' +
         '</div>' +
       '</div>' +
       (empty ? renderEmptyState() : '') +
       '<div class="week">' +
         DAYS.map(function (day) {
-          return renderDay(day.id, { highlightToday: day.id === todayId });
+          return renderDay(day.id, { highlightToday: day.id === todayId, periodControls: true });
         }).join('') +
       '</div>' +
       '<p class="hint hint--block">Her ders kartında adı, öğretmeni ve eklediğin bilgiler (açıklama, konu, ödev, tekrar, not, kaynak) ' +
@@ -1494,7 +1536,7 @@
         '<div class="page__actions">' +
           '<button type="button" class="btn" data-action="timer-open">' + ICONS.clock + 'Sayaç</button>' +
           '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' + esc(dayId) +
-            '" data-slot="school">' + ICONS.plus + 'Ders Ekle</button>' +
+            '" data-slot="' + defaultPlannerSlot(dayId) + '">' + ICONS.plus + 'Ders Ekle</button>' +
         '</div>' +
       '</div>' +
       /* Gün kartı ile "Yapılacaklar" paneli yan yana: geniş ekranı dengeli
@@ -1502,7 +1544,8 @@
       '<div class="today-grid' + (pendingPanel ? '' : ' is-solo') + '">' +
         '<div class="week week--single today-layout">' +
           renderDay(dayId, {
-            slots: ['morning', 'school', 'evening'],
+            slots: ['morning', 'school', 'noon', 'evening'],
+            periodControls: true,
             highlightToday: true
            }) +
         ' </div>' +
@@ -1561,24 +1604,27 @@
   function viewStudy() {
     const todayId = todayDayId();
     const hasAny = DAYS.some(function (day) {
-      return coursesOf(day.id, 'morning').length > 0 || coursesOf(day.id, 'evening').length > 0;
+      return coursesOf(day.id, 'morning').length > 0 || coursesOf(day.id, 'noon').length > 0 ||
+        coursesOf(day.id, 'evening').length > 0;
     });
     return '<section class="page">' +
       pageHeader('Çalışma Programım',
-        'Sabah: güne hazırlık · Akşam: tekrar ve pekiştirme',
+        'Sabah: güne hazırlık · Öğle: gün ortası çalışması · Akşam: tekrar ve pekiştirme',
         '<button type="button" class="btn btn--primary" data-action="new-course" data-day="' + esc(todayId) +
           '" data-slot="evening">' + ICONS.plus + 'Çalışma Ekle</button>') +
       '<div class="notice">' + ICONS.info +
         '<span>Sabah bölümüne o gün okulda göreceğin derslerin ön hazırlığını, akşam bölümüne ' +
-        'işlediğin derslerin tekrarını ve pekiştirme çalışmalarını ekle. Bu iki bölüm okul programından bağımsızdır.</span></div>' +
+        'işlediğin derslerin tekrarını ve pekiştirme çalışmalarını ekle. Öğle ayrı bir çalışma bölümüdür; ' +
+        'Okul Programım ekranındaki okul derslerinden bağımsızdır.</span></div>' +
       (hasAny ? '' : '<div class="empty">' +
         '<h3>Çalışma planın henüz boş.</h3>' +
-        '<p>Bir günün Sabah veya Akşam bölümündeki “+” butonunu kullanarak ' +
+        '<p>Bir günün Sabah, Öğle veya Akşam bölümündeki “+” butonunu kullanarak ' +
         'kendi çalışma düzenini oluştur.</p></div>') +
       '<div class="week mt">' +
         DAYS.map(function (day) {
           return renderDay(day.id, {
-            slots: ['morning', 'evening'],
+            slots: ['morning', 'noon', 'evening'],
+            periodControls: true,
             highlightToday: day.id === todayId
           });
         }).join('') +
@@ -2978,6 +3024,20 @@
   /* Genel uygulama işlemleri (görünüm, tema, yedekleme, onay) */
   function handleAppAction(action, trigger) {
     switch (action) {
+      case 'toggle-period': {
+        const dayId = trigger.dataset.day;
+        const slotId = trigger.dataset.slot;
+        if (!DAY_BY_ID[dayId] || !Object.prototype.hasOwnProperty.call(defaultDayPeriods(dayId), slotId)) break;
+        if (!state.days[dayId].periods) state.days[dayId].periods = defaultDayPeriods(dayId);
+        const enabling = state.days[dayId].periods[slotId] === false;
+        state.days[dayId].periods[slotId] = enabling;
+        if (!isWeekendDay(dayId) && enabling && slotId === 'school') state.days[dayId].periods.noon = false;
+        if (!isWeekendDay(dayId) && enabling && slotId === 'noon') state.days[dayId].periods.school = false;
+        save();
+        render();
+        break;
+      }
+
       case 'set-view':
         ui.view = trigger.dataset.view;
         document.documentElement.setAttribute('data-mobile-nav', 'closed');
