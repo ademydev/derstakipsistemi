@@ -772,6 +772,26 @@ body.is-dragging .slot__empty.drop-target {
 }
 .drawer__foot .spacer { flex: 1; }
 
+/* Sağ tıkla açılan ders kutusu: imlecin yanında, içerik kutusu biçiminde durur. */
+.drawer--context { inset: 0; pointer-events: none; }
+.drawer--context .drawer__panel {
+  top: auto; right: auto; bottom: auto;
+  width: min(480px, calc(100vw - 24px)); height: min(560px, calc(100vh - 24px));
+  border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+  pointer-events: auto; overflow: hidden; animation: fade 0.12s ease-out;
+  box-shadow: var(--shadow-lg);
+}
+.drawer--context .drawer__head { padding: 13px 16px 11px; }
+.drawer--context .drawer__title { font-size: var(--t-lg); }
+.drawer--context .drawer__body { padding: 12px 16px; gap: 12px; }
+.drawer__quick:empty { display: none; }
+.drawer__quick .section { gap: 0; }
+.drawer__quick .quickadd { display: flex; flex-wrap: wrap; gap: 7px; }
+.drawer__quick .btn { min-height: 34px; padding: 0 10px; font-size: var(--t-sm); }
+.drawer__divider { flex: none; height: 1px; background: var(--border); }
+.drawer__content { display: flex; flex-direction: column; gap: var(--s4); }
+.drawer--context .drawer__foot { padding: 10px 14px; }
+
 /* ------------------------- 11) BÖLÜM & LİSTELER ------------------------- */
 /* Bölüm başlığı: küçük, sessiz, yazı tipi harf aralığı ile "üst başlık"
    etkisi verir — kartlardan önce gelir ama bağırmaz. */

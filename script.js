@@ -483,6 +483,7 @@
     authError: null,    // giriş formunda gösterilecek hata
     view: 'today',     // week | today | school | study | settings
     drawer: null,     // açık dersin kimliği
+    drawerContext: null, // sağ tıkla açılan, imleç yakınına yerleşen ders kutusu
     forms: {},        // açık satır içi formlar
     modal: null,      // { type, ... }
     drag: null,       // sürüklenen ders bilgisi
@@ -764,7 +765,7 @@
     const list = state.days[found.dayId].courses;
     const index = list.indexOf(found.course);
     list.splice(index, 1);
-    if (ui.drawer === courseId) ui.drawer = null;
+    if (ui.drawer === courseId) { ui.drawer = null; ui.drawerContext = null; }
     /* Silinen dersin kart açık/kapalı görünümü de temizlenir (Geri al
        durumunda kart kapalı çizilir; veri kaydı etkilenmez). */
     delete ui.expanded[courseId];
@@ -963,6 +964,7 @@
     $('#main').innerHTML = renderView();
     renderDrawer();
     renderModal();
+    positionContextDrawer();
 
     const nextScroller = $('.drawer__body');
     if (nextScroller && scrollTop) nextScroller.scrollTop = scrollTop;
@@ -2006,6 +2008,7 @@
     state = incoming;
     ui.modal = null;
     ui.drawer = null;
+    ui.drawerContext = null;
     ui.forms = {};
     applyTheme();
     save();
@@ -2039,6 +2042,7 @@
     state.settings.theme = theme;
     ui.forms = {};
     ui.drawer = null;
+    ui.drawerContext = null;
     Store.clear().then(function () {
       save();
       flushSave();
@@ -2283,32 +2287,31 @@
     if (!found) { ui.drawer = null; root.innerHTML = ''; return; }
     const course = found.course;
 
-    const body = [
-      renderMetaInfo(course),
-      renderQuickAdd(course),
-      renderCheckList(course, 'topics'),
-      renderGoalList(course),
-      renderCheckList(course, 'homeworks'),
-      renderCheckList(course, 'repeats'),
-      renderCheckList(course, 'notes'),
-      renderCheckList(course, 'sources')
-    ].filter(Boolean).join('');
-
-    root.innerHTML = '<div class="drawer">' +
-      '<div class="drawer__scrim" data-action="close-drawer"></div>' +
-      '<aside class="drawer__panel" role="dialog" aria-modal="true" aria-label="' + esc(course.name) + ' ders detayı">' +
+    const context = ui.drawerContext;
+    const panelStyle = context
+      ? ' style="left:' + Math.round(context.x) + 'px;top:' + Math.round(context.y) + 'px"'
+      : '';
+    root.innerHTML = '<div class="drawer' + (context ? ' drawer--context' : '') + '">' +
+      (context ? '' : '<div class="drawer__scrim" data-action="close-drawer"></div>') +
+      '<aside class="drawer__panel"' + panelStyle + ' role="dialog" aria-modal="' + (context ? 'false' : 'true') + '" aria-label="' + esc(course.name) + ' ders detayı">' +
         '<header class="drawer__head">' +
           '<div>' +
             '<p class="drawer__eyebrow">' + esc(DAY_BY_ID[found.dayId].label) + ' · ' +
               esc(slotLabel(found.dayId, course.slot)) + '</p>' +
             '<h2 class="drawer__title">' + esc(course.name) + '</h2>' +
           '</div>' +
-          '<button type="button" class="btn btn--ghost btn--sm drawer__close" data-action="close-drawer">' +
-            ICONS.close + 'Kapat</button>' +
+          (context ? '' : '<button type="button" class="btn btn--ghost btn--sm drawer__close" data-action="close-drawer">' +
+            ICONS.close + 'Kapat</button>') +
         '</header>' +
         '<div class="drawer__body">' +
-          (body || '<p class="hint">Bu derse henüz ayrıntı eklemedin. Yukarıdaki “＋ Ekle” seçenekleriyle konu, ' +
-            'soru hedefi, ödev, tekrar veya not ekleyebilirsin.</p>') +
+          '<div class="drawer__quick">' + renderQuickAdd(course) + '</div>' +
+          '<div class="drawer__divider" role="separator"></div>' +
+          '<div class="drawer__content">' +
+            (renderMetaInfo(course) + renderCheckList(course, 'topics') + renderGoalList(course) +
+              renderCheckList(course, 'homeworks') + renderCheckList(course, 'repeats') +
+              renderCheckList(course, 'notes') + renderCheckList(course, 'sources') ||
+              '<p class="hint">Henüz içerik eklenmedi. Yukarıdaki düğmelerle bu derse içerik ekleyebilirsin.</p>') +
+          '</div>' +
         '</div>' +
         '<footer class="drawer__foot">' +
           '<button type="button" class="btn btn--sm" data-action="open-course-modal" data-mode="edit" data-id="' +
@@ -2647,6 +2650,49 @@
     handleAppAction(action, trigger, courseId);
   }
 
+  function onCourseContextMenu(event) {
+    const card = event.target.closest ? event.target.closest('.course[data-id]') : null;
+    if (!card || event.target.closest('button, input, textarea, select, a')) return;
+    event.preventDefault();
+    ui.drawer = card.dataset.id;
+    ui.drawerContext = { anchorX: event.clientX, anchorY: event.clientY, x: event.clientX, y: event.clientY };
+    closeForms();
+    render();
+  }
+
+  function positionContextDrawer() {
+    if (!ui.drawerContext) return;
+    const panel = document.querySelector('.drawer--context .drawer__panel');
+    if (!panel) return;
+    const gap = 12;
+    const width = panel.getBoundingClientRect().width;
+    const height = panel.getBoundingClientRect().height;
+    const maxX = Math.max(gap, window.innerWidth - width - gap);
+    const maxY = Math.max(gap, window.innerHeight - height - gap);
+    let x = ui.drawerContext.anchorX;
+    let y = ui.drawerContext.anchorY;
+    if (x + width > window.innerWidth - gap) x -= width;
+    if (y + height > window.innerHeight - gap) y -= height;
+    ui.drawerContext.x = Math.max(gap, Math.min(x, maxX));
+    ui.drawerContext.y = Math.max(gap, Math.min(y, maxY));
+    panel.style.left = Math.round(ui.drawerContext.x) + 'px';
+    panel.style.top = Math.round(ui.drawerContext.y) + 'px';
+  }
+
+  function dismissContextDrawer() {
+    if (!ui.drawerContext) return;
+    ui.drawer = null;
+    ui.drawerContext = null;
+    closeForms();
+    render();
+  }
+
+  function onContextDrawerOutsideClick(event) {
+    if (!ui.drawerContext) return;
+    const panel = document.querySelector('.drawer--context .drawer__panel');
+    if (panel && !panel.contains(event.target)) dismissContextDrawer();
+  }
+
   /* ------------------------------- Sayaç -------------------------------- */
   const timer = { open: false, minimized: false, running: false, remaining: 0, endAt: 0, interval: null, alarmInterval: null, alarmActive: false, alarmStopAt: 0, audioContext: null };
   function timerPrepareAudio() {
@@ -2759,12 +2805,14 @@
     switch (action) {
       case 'open-course':
         ui.drawer = trigger.dataset.id;
+        ui.drawerContext = null;
         closeForms();
         render();
         return true;
 
       case 'close-drawer':
         ui.drawer = null;
+        ui.drawerContext = null;
         closeForms();
         render();
         return true;
@@ -3057,7 +3105,7 @@
     if (event.key === 'Escape') {
       if (pendingConfirm) { closeConfirm(false); return; }
       if (ui.modal) { ui.modal = null; render(); return; }
-      if (ui.drawer) { ui.drawer = null; closeForms(); render(); return; }
+      if (ui.drawer) { ui.drawer = null; ui.drawerContext = null; closeForms(); render(); return; }
       return;
     }
     const status = event.target && event.target.closest ? event.target.closest('#sync-status[data-action]') : null;
@@ -3291,6 +3339,7 @@
     state = emptyState();
     state.settings.theme = theme;
     ui.drawer = null;
+    ui.drawerContext = null;
     ui.modal = null;
     closeForms();
     pendingSave = false;
@@ -3390,6 +3439,9 @@
 
   function init() {
     document.addEventListener('click', onClick);
+    document.addEventListener('click', onContextDrawerOutsideClick);
+    document.addEventListener('contextmenu', onCourseContextMenu);
+    document.addEventListener('scroll', dismissContextDrawer, true);
     document.addEventListener('submit', onSubmit);
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('dragstart', onDragStart);
