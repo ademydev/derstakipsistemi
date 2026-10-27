@@ -1340,15 +1340,15 @@
       '<header class="day__head">' +
         '<div class="day__id">' +
           '<h3 class="day__title">' + esc(DAY_BY_ID[dayId].label) + '</h3>' +
+          (opts.periodControls ? renderPeriodToggles(dayId,
+            (opts.periodSlots || opts.slots).filter(function (slotId) {
+              return !(isWeekendDay(dayId) && slotId === 'school');
+            })) : '') +
         '</div>' +
         '<div class="day__tags">' +
           (isToday ? '<span class="day__badge">Bugün</span>' : '') +
           (total ? '<span class="day__count">' + total + '</span>' : '') +
         '</div>' +
-        (opts.periodControls ? renderPeriodToggles(dayId,
-          (opts.periodSlots || opts.slots).filter(function (slotId) {
-            return !(isWeekendDay(dayId) && slotId === 'school');
-          })) : '') +
       '</header>' +
       body +
     '</article>';
