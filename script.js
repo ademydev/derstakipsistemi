@@ -2742,7 +2742,13 @@
     })) return;
     if (event.target.closest && event.target.closest('.drawer--context .drawer__panel')) return;
     const panel = document.querySelector('.drawer--context .drawer__panel');
-    if (panel && !panel.contains(event.target)) dismissContextDrawer();
+    if (panel && !panel.contains(event.target)) {
+      /* İlk dış tıklama yalnızca menüyü kapatır; alttaki öğenin işlemi sonraki
+         tıklamada gerçekleşir. Capture aşaması, hedefin click işleyicisinden önce çalışır. */
+      event.preventDefault();
+      event.stopPropagation();
+      dismissContextDrawer();
+    }
   }
 
   function onContextDrawerScroll(event) {
@@ -3519,7 +3525,7 @@
 
   function init() {
     document.addEventListener('click', onClick);
-    document.addEventListener('click', onContextDrawerOutsideClick);
+    document.addEventListener('click', onContextDrawerOutsideClick, true);
     document.addEventListener('contextmenu', onCourseContextMenu);
     document.addEventListener('scroll', onContextDrawerScroll, true);
     document.addEventListener('submit', onSubmit);
