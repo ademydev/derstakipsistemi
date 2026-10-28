@@ -2751,6 +2751,21 @@
     }
   }
 
+  function onContextDrawerScrollInput(event) {
+    if (!ui.drawerContext) return;
+    const panelBody = document.querySelector('.drawer--context .drawer__body');
+    if (panelBody && panelBody.contains(event.target)) return;
+    event.preventDefault();
+  }
+
+  function onContextDrawerScrollKey(event) {
+    if (!ui.drawerContext) return;
+    const scrollKeys = ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'];
+    if (scrollKeys.indexOf(event.key) === -1 && event.code !== 'Space') return;
+    if (event.target.closest && event.target.closest('.drawer--context .drawer__panel')) return;
+    event.preventDefault();
+  }
+
   function onContextDrawerScroll(event) {
     if (!ui.drawerContext) return;
     const panel = document.querySelector('.drawer--context .drawer__panel');
@@ -3527,6 +3542,9 @@
     document.addEventListener('click', onClick);
     document.addEventListener('click', onContextDrawerOutsideClick, true);
     document.addEventListener('contextmenu', onCourseContextMenu);
+    document.addEventListener('wheel', onContextDrawerScrollInput, { capture: true, passive: false });
+    document.addEventListener('touchmove', onContextDrawerScrollInput, { capture: true, passive: false });
+    document.addEventListener('keydown', onContextDrawerScrollKey, true);
     document.addEventListener('scroll', onContextDrawerScroll, true);
     document.addEventListener('submit', onSubmit);
     document.addEventListener('keydown', onKeyDown);
