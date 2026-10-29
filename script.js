@@ -536,7 +536,7 @@
     const resolved = resolveTheme();
     document.documentElement.setAttribute('data-theme', resolved);
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0d1220' : '#4f46e5');
+    if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0b1514' : '#0f766e');
   }
 
   /* Sidebar (masaüstü rayı) aç/kapa durumu. Tüm görsel davranış CSS'te;
