@@ -27,16 +27,14 @@
   --s5: 20px; --s6: 24px;  --s7: 32px;
 
   /* Yarıçap ölçeği: kompakt köşeler, progress çubuklarında ayrı tam yuvarlaklık */
-  --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 10px; --r-xl: 12px; --r-full: 999px;
+  --r-xs: 3px; --r-sm: 4px; --r-md: 6px; --r-lg: 8px; --r-xl: 10px; --r-full: 999px;
 
   /* Tipografi ölçeği */
   --t-xs: 11px; --t-sm: 12.5px; --t-md: 14px; --t-lg: 15.5px; --t-xl: 19px; --t-2xl: 27px;
 
   /* Yüzeyler — açık, ferah, ince sınırlar */
   --bg: #f4f6f8;
-  --bg-grad:
-    radial-gradient(1200px 560px at 6% -14%, rgba(71, 85, 105, 0.055), rgba(71, 85, 105, 0) 62%),
-    radial-gradient(1000px 520px at 96% -10%, rgba(148, 163, 184, 0.05), rgba(148, 163, 184, 0) 62%);
+  --bg-grad: none;
   --surface: #ffffff;
   --surface-2: #f8fafc;
   --surface-3: #eef2f6;
@@ -93,9 +91,7 @@
 [data-theme="dark"] {
   color-scheme: dark;
   --bg: #11151b;
-  --bg-grad:
-    radial-gradient(1200px 620px at 4% -16%, rgba(148, 163, 184, 0.10), rgba(148, 163, 184, 0) 60%),
-    radial-gradient(1000px 560px at 98% -12%, rgba(71, 85, 105, 0.10), rgba(71, 85, 105, 0) 60%);
+  --bg-grad: none;
   --surface: #191e26;
   --surface-2: #222833;
   --surface-3: #2d3541;
@@ -159,8 +155,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4 { margin: 0; font-weight: 650; line-height: 1.25; letter-spacing: -0.012em; }
-h2 { font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.022em; }
+h1, h2, h3, h4 { margin: 0; font-weight: 700; line-height: 1.25; letter-spacing: -0.006em; }
+h2 { font-size: var(--t-2xl); font-weight: 750; letter-spacing: -0.012em; }
 p { margin: 0; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -206,7 +202,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .brand__mark {
   width: 38px; height: 38px; flex: none; display: grid; place-items: center;
   border-radius: var(--r-md); color: var(--accent-contrast); font-size: 18px; background: var(--accent);
-  box-shadow: 0 1px 2px rgba(15, 75, 66, 0.20), 0 8px 18px -8px rgba(15, 75, 66, 0.34);
+  box-shadow: none;
 }
 .brand__text { display: flex; flex-direction: column; min-width: 0; }
 .brand__text h1 {
@@ -238,7 +234,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 /* Aktif sayfa en belirgin öğe: dolu yüzey + aksan rengi + ince kenarlık */
 .nav__item.is-active {
   background: var(--surface); color: var(--accent);
-  border-color: var(--accent-border); font-weight: 650; box-shadow: var(--shadow-xs);
+  border-color: var(--accent-border); font-weight: 650; box-shadow: none;
 }
 .nav__item.is-active .icon { opacity: 1; }
 
@@ -400,7 +396,7 @@ body.timer-active { overflow: hidden; }
 .empty {
   display: flex; flex-direction: column; align-items: flex-start; gap: var(--s2);
   padding: var(--s6); margin-bottom: var(--s4); border-radius: var(--r-lg);
-  background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-xs);
+  background: var(--surface); border: 1px solid var(--border); box-shadow: none;
 }
 .empty h3 { font-size: 16.5px; }
 .empty p { font-size: var(--t-md); color: var(--text-soft); max-width: 62ch; line-height: 1.6; }
@@ -443,7 +439,7 @@ body.timer-active { overflow: hidden; }
 
 /* Bugün hafifçe vurgulanır: ince aksan kenarlığı + başlık zemini.
    Aşırı vurgu yok, göz yormaz. */
-.day--today { border-color: var(--border-strong); box-shadow: none; }
+.day--today { border-color: var(--border); box-shadow: none; }
 .day--today .day__head { background: var(--accent-soft); border-bottom-color: var(--accent-border); }
 
 .day__head {
@@ -1003,7 +999,7 @@ input:-webkit-autofill:focus {
 .modal {
   position: relative; width: min(540px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto;
   display: flex; flex-direction: column; gap: var(--s4); padding: var(--s5);
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-lg);
   box-shadow: var(--shadow-lg); animation: pop 0.18s ease-out;
 }
 .modal--sm { width: min(430px, 100%); }
@@ -1049,7 +1045,7 @@ input:-webkit-autofill:focus {
 .panel {
   display: flex; flex-direction: column; gap: var(--s3); padding: var(--s5);
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-lg); box-shadow: var(--shadow-xs);
+  border-radius: var(--r-lg); box-shadow: none;
 }
 .panel h3 { font-size: 15.5px; }
 .panel__sub { font-size: var(--t-md); color: var(--text-mute); line-height: 1.55; }
@@ -1483,7 +1479,7 @@ input:-webkit-autofill:focus {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 
 /* Bugünün ders kartı ile ilerleme kartı kesin olarak ayrı yüzeylerdir. */
