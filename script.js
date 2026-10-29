@@ -2703,7 +2703,10 @@
     ui.drawer = card.dataset.id;
     ui.drawerContext = { anchorX: event.clientX, anchorY: event.clientY, x: event.clientX, y: event.clientY };
     closeForms();
-    render();
+    /* Sağ tıkta ana sayfayı yeniden çizme: kart DOM'da yerinde kalsın ki
+       imleç altındaki :hover/parlama durumu bir anlığına sıfırlanıp yanıp sönmesin. */
+    renderDrawer();
+    positionContextDrawer();
   }
 
   function positionContextDrawer() {
@@ -2715,10 +2718,12 @@
     const height = panel.getBoundingClientRect().height;
     const maxX = Math.max(gap, window.innerWidth - width - gap);
     const maxY = Math.max(gap, window.innerHeight - height - gap);
-    let x = ui.drawerContext.anchorX;
-    let y = ui.drawerContext.anchorY;
-    if (x + width > window.innerWidth - gap) x -= width;
-    if (y + height > window.innerHeight - gap) y -= height;
+    /* Kutuyu tıklama noktasının hemen yanına koy; sağ tıklama noktası kutunun
+       altında kalmadığı için kartın hover parlaması sabit görünür. */
+    let x = ui.drawerContext.anchorX + gap;
+    let y = ui.drawerContext.anchorY + gap;
+    if (x + width > window.innerWidth - gap) x = ui.drawerContext.anchorX - width - gap;
+    if (y + height > window.innerHeight - gap) y = ui.drawerContext.anchorY - height - gap;
     ui.drawerContext.x = Math.max(gap, Math.min(x, maxX));
     ui.drawerContext.y = Math.max(gap, Math.min(y, maxY));
     panel.style.left = Math.round(ui.drawerContext.x) + 'px';
@@ -2730,7 +2735,8 @@
     ui.drawer = null;
     ui.drawerContext = null;
     closeForms();
-    render();
+    /* Arka plandaki kartları yeniden oluşturmadan yalnızca sağ tık panelini kapat. */
+    renderDrawer();
   }
 
   function onContextDrawerOutsideClick(event) {
