@@ -60,10 +60,11 @@
   --warn: #94621c;
   --warn-soft: #f8f1e4;
   --warn-border: #e8d7b5;
-  --morning: #a66b19;
+  --morning: #9a6b2f;
   --noon: #397f91;
-  --evening: #76639b;
-  --violet: #76639b;
+  --evening: #55748f;
+  --evening-soft: #edf2f7;
+  --violet: #55748f;
   --danger: #d92d20;
   --danger-soft: #fef3f2;
   --danger-border: #fbd3cf;
@@ -116,10 +117,11 @@
   --warn: #e7bc70;
   --warn-soft: rgba(231, 188, 112, 0.14);
   --warn-border: rgba(231, 188, 112, 0.30);
-  --morning: #e7bc70;
+  --morning: #d2ad70;
   --noon: #72c2d0;
-  --evening: #b3a0d7;
-  --violet: #b3a0d7;
+  --evening: #9bb3cb;
+  --evening-soft: rgba(155, 179, 203, 0.14);
+  --violet: #9bb3cb;
   --danger: #ff8d80;
   --danger-soft: rgba(255, 141, 128, 0.13);
   --danger-border: rgba(255, 141, 128, 0.32);
@@ -743,7 +745,7 @@ body.is-dragging .slot__empty.drop-target {
   background: var(--surface-3); color: var(--text-soft);
 }
 .chip--morning { background: var(--warn-soft); color: var(--warn); }
-.chip--evening { background: var(--accent-soft); color: var(--evening); }
+.chip--evening { background: var(--evening-soft); color: var(--evening); }
 .chip--school { background: var(--accent-soft); color: var(--accent); }
 .chip--done { background: var(--ok-soft); color: var(--ok); }
 /* Bilgi veren ince rozet: "her gün" gibi ikincil etiketler */
